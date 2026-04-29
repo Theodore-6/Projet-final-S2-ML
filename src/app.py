@@ -7,8 +7,10 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
+from sklearn.metrics.pairwise import cosine_similarity
 
 from config import (
+    DATA_DIR,
     MODEL_METRICS_FILE,
     MODELS,
     OUTCOME_COLUMN,
@@ -178,6 +180,8 @@ DOMAIN_SPECIALISTS = {
     "famille": "Avocat en droit de la famille",
 }
 
+REFERENCE_METADATA_FILE = DATA_DIR / "processed_conseil_etat_june_2022.csv"
+
 
 def _humanize_category(value: str) -> str:
     return CATEGORY_LABELS.get(value, value)
@@ -262,6 +266,22 @@ def _load_metrics() -> Optional[pd.DataFrame]:
         return None
 
     return pd.read_csv(MODEL_METRICS_FILE)
+
+
+def _load_reference_metadata() -> Optional[pd.DataFrame]:
+    if not REFERENCE_METADATA_FILE.exists():
+        return None
+
+    use_columns = [
+        "source_file",
+        "numero_ecli",
+        "numero_dossier",
+        "date_lecture",
+        "nom_juridiction",
+        "formation_jugement",
+        "solution",
+    ]
+    return pd.read_csv(REFERENCE_METADATA_FILE, usecols=use_columns)
 
 
 def _load_demo_model():
@@ -370,6 +390,82 @@ def _format_outcome_df(outcome_df: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
+def _find_similar_jurisprudence(
+    model,
+    dataset_df: Optional[pd.DataFrame],
+    reference_df: Optional[pd.DataFrame],
+    facts_summary: str,
+    top_n: int = 3,
+) -> Optional[pd.DataFrame]:
+    if dataset_df is None or dataset_df.empty:
+        return None
+
+    pipeline_steps = getattr(model, "named_steps", {})
+    vectorizer = pipeline_steps.get("tfidf")
+    if vectorizer is None or not hasattr(vectorizer, "transform"):
+        return None
+
+    dataset_vectors = vectorizer.transform(dataset_df[TEXT_COLUMN].astype(str))
+    query_vector = vectorizer.transform([facts_summary])
+    similarities = cosine_similarity(query_vector, dataset_vectors).ravel()
+
+    similar_df = dataset_df.copy()
+    similar_df["similarity"] = similarities
+    similar_df = similar_df.sort_values("similarity", ascending=False).head(top_n)
+
+    if reference_df is not None and "source_file" in similar_df.columns:
+        similar_df = similar_df.merge(reference_df, on="source_file", how="left", suffixes=("", "_ref"))
+
+    similar_df["categorie_lisible"] = similar_df[TARGET_COLUMN].map(_humanize_category)
+    similar_df["similarity"] = (similar_df["similarity"] * 100).round(1)
+    similar_df["resume_court"] = (
+        similar_df[TEXT_COLUMN]
+        .astype(str)
+        .str.slice(0, 220)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        + "..."
+    )
+
+    ecli_column = "numero_ecli" if "numero_ecli" in similar_df.columns else None
+    dossier_column = "numero_dossier" if "numero_dossier" in similar_df.columns else None
+    juridiction_column = "nom_juridiction" if "nom_juridiction" in similar_df.columns else None
+
+    if ecli_column is None:
+        similar_df["numero_ecli"] = ""
+        ecli_column = "numero_ecli"
+    if dossier_column is None:
+        similar_df["numero_dossier"] = ""
+        dossier_column = "numero_dossier"
+    if juridiction_column is None:
+        similar_df["nom_juridiction"] = ""
+        juridiction_column = "nom_juridiction"
+
+    return similar_df.rename(
+        columns={
+            "date_lecture": "Date",
+            "categorie_lisible": "Categorie",
+            "solution": "Issue observee",
+            "similarity": "Proximite textuelle (%)",
+            "resume_court": "Extrait de faits proches",
+            ecli_column: "ECLI",
+            dossier_column: "Numero dossier",
+            juridiction_column: "Juridiction",
+        }
+    )[
+        [
+            "ECLI",
+            "Numero dossier",
+            "Date",
+            "Juridiction",
+            "Categorie",
+            "Issue observee",
+            "Proximite textuelle (%)",
+            "Extrait de faits proches",
+        ]
+    ]
+
+
 def _top_linear_evidence(
     model, facts_summary: str, predicted_category: str, top_n: int = 6
 ) -> Optional[pd.DataFrame]:
@@ -418,6 +514,7 @@ def build_app() -> None:
     st.set_page_config(page_title=PROJECT_TITLE, layout="wide")
 
     dataset_df = _load_dataset()
+    reference_df = _load_reference_metadata()
     metrics_df = _load_metrics()
     model_config, model = _load_demo_model()
 
@@ -663,6 +760,32 @@ def build_app() -> None:
                 st.info(
                     "Pas d'estimation empirique disponible pour cette categorie."
                 )
+
+            st.markdown("Jurisprudences administratives proches dans le corpus")
+            if domain_is_confident and top_domain != "administratif":
+                st.warning(
+                    "Je n'affiche pas de rapprochement de jurisprudence administrative "
+                    "comme reference principale ici, car le texte semble hors perimetre "
+                    "du droit administratif."
+                )
+            else:
+                similar_cases_df = _find_similar_jurisprudence(
+                    model,
+                    dataset_df,
+                    reference_df,
+                    facts_summary,
+                )
+                if similar_cases_df is not None:
+                    st.caption(
+                        "Ces references correspondent aux decisions du corpus dont le "
+                        "resume de faits est le plus proche textuellement de votre saisie."
+                    )
+                    st.dataframe(similar_cases_df, width="stretch", hide_index=True)
+                else:
+                    st.info(
+                        "Impossible de calculer pour l'instant un rapprochement fiable "
+                        "avec la jurisprudence du corpus."
+                    )
 
     st.subheader("Limites")
     st.markdown(
