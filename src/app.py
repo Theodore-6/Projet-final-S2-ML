@@ -96,9 +96,15 @@ def build_app() -> None:
         """
         Cet outil aide a qualifier un dossier juridique a partir d'un resume de
         faits. Le MVP actuel est centre sur des decisions du Conseil d'Etat en
-        droit administratif. Il doit etre interprete comme un outil
-        d'orientation et de productivite, pas comme un conseil juridique.
+        droit administratif issues de l'open data officiel de la justice
+        administrative. Il doit etre interprete comme un outil d'orientation
+        et de productivite, pas comme un conseil juridique.
         """
+    )
+
+    st.caption(
+        "Source officielle: https://opendata.justice-administrative.fr "
+        "| Extension possible: CAA et tribunaux administratifs"
     )
 
     col1, col2, col3 = st.columns(3)
@@ -129,6 +135,12 @@ def build_app() -> None:
     if dataset_df is None:
         st.warning("Le dataset de travail est introuvable.")
     else:
+        st.markdown(
+            """
+            Le jeu de donnees actuellement charge provient d'un lot Conseil d'Etat
+            transforme a partir de l'open data officiel de la justice administrative.
+            """
+        )
         left, right = st.columns((2, 1))
         with left:
             st.dataframe(dataset_df.head(10), width="stretch")
@@ -194,6 +206,7 @@ def build_app() -> None:
     st.markdown(
         """
         - Le dataset actuel couvre surtout le droit administratif et non l'ensemble du droit francais.
+        - La source officielle permet d'etendre le projet aux CAA et aux tribunaux administratifs, mais ce MVP reste centre sur le Conseil d'Etat.
         - Les probabilites sont des signaux statistiques, pas des certitudes.
         - Toute analyse finale doit rester sous controle humain.
         """

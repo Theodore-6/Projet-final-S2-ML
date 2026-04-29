@@ -1,6 +1,6 @@
 # Legal Case Triage Assistant
 
-This project adapts the upstream ML proof-of-concept template into a legal triage assistant. The current MVP is intentionally scoped to French administrative law using Conseil d'Etat decisions. The goal is to classify the probable recours category from a short summary of facts, then surface empirical outcome hints from similar cases.
+This project adapts the upstream ML proof-of-concept template into a legal triage assistant. The current MVP is intentionally scoped to French administrative law using Conseil d'Etat decisions from the official open-data portal of the administrative courts. The goal is to classify the probable recours category from a short summary of facts, then surface empirical outcome hints from similar cases.
 
 The product positioning is intentionally narrow: this is an orientation tool for pre-analysis, not an automated lawyer and not legal advice.
 
@@ -29,6 +29,12 @@ Current target categories:
 - `exces_de_pouvoir`
 - `autres_recours`
 
+The current implementation focuses on Conseil d'Etat decisions only, but the data pipeline is compatible with a broader administrative-law scope using the official portal for:
+
+- Conseil d'Etat,
+- cours administratives d'appel,
+- tribunaux administratifs.
+
 ## Repository Workflow
 
 This repository follows the upstream template workflow:
@@ -47,7 +53,17 @@ Additional project-specific files:
 
 ## Dataset Schema
 
-The current working dataset comes from the June 2022 Conseil d'Etat open-data batch and is transformed into an ML-ready administrative law dataset.
+The current working dataset comes from the June 2022 Conseil d'Etat open-data batch published through the official administrative justice open-data portal and is transformed into an ML-ready administrative law dataset.
+
+Official source used in the project:
+
+- `https://opendata.justice-administrative.fr`
+
+Current local processing flow:
+
+- raw official XML decisions,
+- flat CSV extraction with `scripts/parse_conseil_etat.py`,
+- ML-ready dataset generation with `scripts/prepare_admin_dataset.py`.
 
 Expected columns:
 
@@ -63,6 +79,14 @@ Configured baseline models:
 - `TF-IDF + Linear SVM`
 
 These are strong, interpretable baselines for short legal text classification and fit the template evaluation flow well.
+
+## Why This Source Matters
+
+Using `opendata.justice-administrative.fr` improves the project on three fronts:
+
+- stronger methodological legitimacy thanks to an official judicial source,
+- easier extensibility to additional administrative jurisdictions,
+- better alignment between the business narrative and the actual legal data used by the models.
 
 ## How To Run
 
@@ -113,5 +137,6 @@ After a successful run, you should have:
 ## Important Limits
 
 - The current MVP is based on administrative decisions only and does not cover all French law.
+- The present corpus is limited to a Conseil d'Etat batch, even though the official portal also exposes CAA and TA decisions.
 - Output probabilities or outcome hints must be framed as empirical signals, not certainties.
 - The tool supports legal orientation only and does not replace professional legal analysis.
