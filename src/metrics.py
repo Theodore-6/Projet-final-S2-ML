@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
 
 def compute_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
     """Return the metrics used to compare model performance.
@@ -23,6 +25,13 @@ def compute_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
       ``results/model_metrics.csv``.
     """
 
-    raise NotImplementedError(
-        "Implement metrics.compute_metrics() before running scripts/main.py."
-    )
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "f1_macro": f1_score(y_true, y_pred, average="macro", zero_division=0),
+        "precision_macro": precision_score(
+            y_true, y_pred, average="macro", zero_division=0
+        ),
+        "recall_macro": recall_score(
+            y_true, y_pred, average="macro", zero_division=0
+        ),
+    }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import os
 import subprocess
@@ -31,6 +32,9 @@ APP_ENTRYPOINT = config.APP_ENTRYPOINT
 MODELS = config.MODELS
 STREAMLIT_HOST = config.STREAMLIT_HOST
 STREAMLIT_PORT = config.STREAMLIT_PORT
+
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 data_module = _load_module("project_data", SRC_DIR / "data.py")
 metrics_module = _load_module("project_metrics", SRC_DIR / "metrics.py")
@@ -137,7 +141,20 @@ def _launch_streamlit() -> None:
     )
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Evaluate saved models and optionally launch the Streamlit app."
+    )
+    parser.add_argument(
+        "--no-streamlit",
+        action="store_true",
+        help="Evaluate models and write metrics without starting Streamlit.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = _parse_args()
     _validate_app_entrypoint()
     _validate_models_config()
 
@@ -161,8 +178,10 @@ def main() -> None:
 
     print("Model evaluation completed. Metrics saved to results/model_metrics.csv")
     print(metrics_df.to_string(index=False))
-    print(f"\nLaunching Streamlit on http://{STREAMLIT_HOST}:{STREAMLIT_PORT} ...")
+    if args.no_streamlit:
+        return
 
+    print(f"\nLaunching Streamlit on http://{STREAMLIT_HOST}:{STREAMLIT_PORT} ...")
     _launch_streamlit()
 
 

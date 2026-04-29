@@ -26,16 +26,31 @@ for dir in [
 ENV_FILE = PROJECT_ROOT / ".env"
 APP_ENTRYPOINT = PROJECT_ROOT / "src" / "app.py"
 MODEL_METRICS_FILE = RESULTS_DIR / "model_metrics.csv"
+PROCESSED_DATA_FILE = DATA_DIR / "processed_legal_cases_admin.csv"
 
 STREAMLIT_HOST = "localhost"
 STREAMLIT_PORT = 8501
+RANDOM_STATE = 42
+TEST_SIZE = 0.25
 
-# Students must replace this example with their trained models.
-# Each entry must point to a serialized model saved as `.joblib`, `.pkl`, or `.pickle`.
+PROJECT_TITLE = "Assistant d'aide a l'analyse juridique"
+PROJECT_SUBTITLE = (
+    "Triage de dossiers en droit administratif a partir d'un resume de faits"
+)
+
+TEXT_COLUMN = "facts_summary"
+TARGET_COLUMN = "case_category"
+OUTCOME_COLUMN = "likely_outcome"
+
 MODELS = {
-    "model_a": {
-        "name": "Model A",
-        "description": "A simple baseline model.",
-        "path": MODELS_DIR / "model_a.pkl",
+    "log_reg_legal": {
+        "name": "TF-IDF + Logistic Regression",
+        "description": "Baseline text classifier for legal case triage.",
+        "path": MODELS_DIR / "log_reg_legal.joblib",
+    },
+    "linear_svm_legal": {
+        "name": "TF-IDF + Linear SVM",
+        "description": "Margin-based baseline for short legal fact summaries.",
+        "path": MODELS_DIR / "linear_svm_legal.joblib",
     },
 }
