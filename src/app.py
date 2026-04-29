@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 import pandas as pd
@@ -18,6 +19,235 @@ from config import (
     TEXT_COLUMN,
 )
 from model_io import load_model
+
+
+CATEGORY_LABELS = {
+    "plein_contentieux": "Plein contentieux",
+    "exces_de_pouvoir": "Recours pour exces de pouvoir",
+    "autres_recours": "Autres recours administratifs",
+}
+
+OUTCOME_LABELS = {
+    "defavorable_requerant": "Defavorable au requerant",
+    "favorable_requerant": "Favorable au requerant",
+    "partiellement_favorable": "Partiellement favorable au requerant",
+    "desistement": "Desistement du requerant",
+    "renvoi": "Renvoi devant une autre juridiction ou formation",
+    "non_lieu": "Non-lieu",
+    "autre_issue": "Autre issue procedurale",
+}
+
+OUTCOME_USER_MEANINGS = {
+    "defavorable_requerant": "Si vous etes le requerant : vous perdez ou vous n'obtenez pas ce que vous demandiez.",
+    "favorable_requerant": "Si vous etes le requerant : vous gagnez.",
+    "partiellement_favorable": "Si vous etes le requerant : vous gagnez seulement en partie.",
+    "desistement": "Si vous etes le requerant : vous retirez votre requete.",
+    "renvoi": "L'affaire est renvoyee devant une autre juridiction ou formation ; ce n'est pas une victoire nette immediate.",
+    "non_lieu": "Le juge estime qu'il n'y a plus lieu de statuer au fond.",
+    "autre_issue": "Issue procedurale diverse qui ne se lit pas comme une victoire ou une defaite simple.",
+}
+
+OUTCOME_WINNER_LABELS = {
+    "defavorable_requerant": "La partie defenderesse gagne le plus souvent (souvent l'administration)",
+    "favorable_requerant": "Le requerant gagne le plus souvent",
+    "partiellement_favorable": "Le requerant gagne en partie",
+    "desistement": "Pas de gagnant clair : le requerant retire sa requete",
+    "renvoi": "Pas de gagnant clair a ce stade",
+    "non_lieu": "Pas de gagnant clair a ce stade",
+    "autre_issue": "Pas de gagnant clair",
+}
+
+METRIC_LABELS = {
+    "accuracy": "Accuracy",
+    "f1_macro": "F1 macro",
+    "precision_macro": "Precision macro",
+    "recall_macro": "Recall macro",
+}
+
+SPECIALIST_GUIDANCE = {
+    "plein_contentieux": {
+        "specialist": "Avocat en plein contentieux administratif",
+        "orientation": (
+            "A orienter vers un specialiste des litiges ou l'on demande une "
+            "condamnation, une indemnisation, un paiement, une responsabilite "
+            "de la puissance publique ou un contentieux fiscal / contractuel."
+        ),
+        "examples": (
+            "Exemples frequents : responsabilite hospitaliere, indemnisation, "
+            "marches publics, fiscalite, sanctions administratives avec enjeu financier."
+        ),
+    },
+    "exces_de_pouvoir": {
+        "specialist": "Avocat en recours contre les decisions administratives",
+        "orientation": (
+            "A orienter vers un specialiste qui attaque la legalite d'un acte "
+            "administratif et cherche surtout son annulation."
+        ),
+        "examples": (
+            "Exemples frequents : refus d'autorisation, decret, arrete, "
+            "decision d'administration, sanction administrative contestee."
+        ),
+    },
+    "autres_recours": {
+        "specialist": "Avocat en contentieux administratif a confirmer",
+        "orientation": (
+            "Categorie plus heterogene. Une revue humaine est necessaire pour "
+            "identifier le sous-contentieux exact avant d'orienter le dossier."
+        ),
+        "examples": (
+            "Exemples possibles : pension, execution, interpretation, revision "
+            "ou autres recours plus techniques."
+        ),
+    },
+}
+
+DOMAIN_KEYWORDS = {
+    "administratif": [
+        "administration",
+        "administratif",
+        "arrete",
+        "autorisation",
+        "collectivite",
+        "commune",
+        "conseil d'etat",
+        "decision administrative",
+        "decret",
+        "etat",
+        "impot",
+        "impots",
+        "mairie",
+        "ministere",
+        "permis",
+        "prefet",
+        "prefecture",
+        "recours",
+        "refus",
+        "sanction administrative",
+        "service public",
+        "titre de sejour",
+    ],
+    "travail": [
+        "employe",
+        "employeur",
+        "entreprise",
+        "harcelement",
+        "licenciement",
+        "patron",
+        "prudhom",
+        "prud'homme",
+        "prudhommes",
+        "prud'hommes",
+        "salaire",
+        "salarie",
+        "stage",
+        "travail",
+    ],
+    "penal": [
+        "agression",
+        "amende",
+        "arme",
+        "coupable",
+        "delit",
+        "escroquerie",
+        "garde a vue",
+        "homicide",
+        "peine",
+        "plainte",
+        "police",
+        "prison",
+        "viol",
+        "vol",
+    ],
+    "famille": [
+        "divorce",
+        "enfant",
+        "famille",
+        "garde",
+        "mariage",
+        "pension alimentaire",
+        "separation",
+        "succession",
+        "tutelle",
+    ],
+}
+
+DOMAIN_SPECIALISTS = {
+    "administratif": "Avocat en droit administratif",
+    "travail": "Avocat en droit du travail",
+    "penal": "Avocat en droit penal",
+    "famille": "Avocat en droit de la famille",
+}
+
+
+def _humanize_category(value: str) -> str:
+    return CATEGORY_LABELS.get(value, value)
+
+
+def _humanize_outcome(value: str) -> str:
+    return OUTCOME_LABELS.get(value, value)
+
+
+def _normalize_text(value: str) -> str:
+    normalized = value.lower()
+    replacements = {
+        "é": "e",
+        "è": "e",
+        "ê": "e",
+        "ë": "e",
+        "à": "a",
+        "â": "a",
+        "î": "i",
+        "ï": "i",
+        "ô": "o",
+        "ö": "o",
+        "ù": "u",
+        "û": "u",
+        "ü": "u",
+        "ç": "c",
+        "'": " ",
+    }
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    return normalized
+
+
+def _detect_legal_domain(facts_summary: str) -> dict[str, object]:
+    normalized = _normalize_text(facts_summary)
+    scores = {}
+    matched_terms = {}
+
+    for domain, keywords in DOMAIN_KEYWORDS.items():
+        matches = []
+        for keyword in keywords:
+            keyword_normalized = _normalize_text(keyword)
+            if keyword_normalized in normalized:
+                matches.append(keyword)
+        scores[domain] = len(matches)
+        matched_terms[domain] = matches
+
+    top_domain = max(scores, key=scores.get)
+    top_score = scores[top_domain]
+    second_score = sorted(scores.values(), reverse=True)[1] if len(scores) > 1 else 0
+
+    return {
+        "scores": scores,
+        "matched_terms": matched_terms,
+        "top_domain": top_domain,
+        "top_score": top_score,
+        "second_score": second_score,
+        "is_confident": top_score >= 2 and top_score > second_score,
+    }
+
+
+def _specialist_guidance(predicted_category: str) -> dict[str, str]:
+    return SPECIALIST_GUIDANCE.get(
+        predicted_category,
+        {
+            "specialist": "Specialiste administratif a confirmer",
+            "orientation": "Une qualification humaine complementaire est necessaire.",
+            "examples": "Le dossier sort du perimetre le plus stable du MVP.",
+        },
+    )
 
 
 def _load_dataset() -> Optional[pd.DataFrame]:
@@ -45,6 +275,25 @@ def _load_demo_model():
             return model_config, load_model(model_config["path"])
 
     return None, None
+
+
+def _format_metrics(metrics_df: pd.DataFrame) -> pd.DataFrame:
+    display_df = metrics_df.copy()
+    display_df["model_name"] = display_df["model_name"].astype(str)
+
+    for column in ("accuracy", "f1_macro", "precision_macro", "recall_macro"):
+        if column in display_df.columns:
+            display_df[column] = (display_df[column] * 100).round(1)
+
+    rename_map = {
+        "model_name": "Modele",
+        "accuracy": "Accuracy (%)",
+        "f1_macro": "F1 macro (%)",
+        "precision_macro": "Precision macro (%)",
+        "recall_macro": "Recall macro (%)",
+    }
+    keep_columns = [column for column in rename_map if column in display_df.columns]
+    return display_df[keep_columns].rename(columns=rename_map)
 
 
 def _predict_case(model, facts_summary: str) -> tuple[str, Optional[pd.DataFrame]]:
@@ -82,6 +331,89 @@ def _empirical_outcomes(
     return outcome_df
 
 
+def _format_probability_df(probability_df: pd.DataFrame) -> pd.DataFrame:
+    display_df = probability_df.copy()
+    display_df["category_label"] = display_df["case_category"].map(_humanize_category)
+    display_df["probability"] = (display_df["probability"] * 100).round(1)
+    return display_df.rename(
+        columns={
+            "category_label": "Categorie interpretee",
+            "case_category": "Code categorie",
+            "probability": "Probabilite (%)",
+        }
+    )[
+        ["Categorie interpretee", "Code categorie", "Probabilite (%)"]
+    ]
+
+
+def _format_outcome_df(outcome_df: pd.DataFrame) -> pd.DataFrame:
+    display_df = outcome_df.copy()
+    display_df["outcome_label"] = display_df[OUTCOME_COLUMN].map(_humanize_outcome)
+    display_df["winner_label"] = display_df[OUTCOME_COLUMN].map(OUTCOME_WINNER_LABELS)
+    display_df["user_meaning"] = display_df[OUTCOME_COLUMN].map(
+        OUTCOME_USER_MEANINGS
+    )
+    return display_df.rename(
+        columns={
+            "outcome_label": "Lecture metier",
+            "winner_label": "Qui est le plus souvent avantagé",
+            "user_meaning": "Si vous etes le requerant, cela signifie",
+            "share": "Part observee (%)",
+        }
+    )[
+        [
+            "Lecture metier",
+            "Qui est le plus souvent avantagé",
+            "Si vous etes le requerant, cela signifie",
+            "Part observee (%)",
+        ]
+    ]
+
+
+def _top_linear_evidence(
+    model, facts_summary: str, predicted_category: str, top_n: int = 6
+) -> Optional[pd.DataFrame]:
+    pipeline_steps = getattr(model, "named_steps", {})
+    vectorizer = pipeline_steps.get("tfidf")
+    classifier = pipeline_steps.get("classifier")
+
+    if vectorizer is None or classifier is None:
+        return None
+
+    if not hasattr(vectorizer, "transform") or not hasattr(vectorizer, "get_feature_names_out"):
+        return None
+
+    if not hasattr(classifier, "coef_") or not hasattr(classifier, "classes_"):
+        return None
+
+    class_labels = list(classifier.classes_)
+    if predicted_category not in class_labels:
+        return None
+
+    row = vectorizer.transform([facts_summary])
+    class_index = class_labels.index(predicted_category)
+    contributions = row.multiply(classifier.coef_[class_index]).tocsr()
+    feature_names = vectorizer.get_feature_names_out()
+
+    evidence = []
+    for feature_index, contribution in zip(contributions.indices, contributions.data):
+        contribution_value = float(contribution)
+        if contribution_value <= 0:
+            continue
+        evidence.append(
+            {
+                "Terme repere dans le texte": feature_names[feature_index],
+                "Contribution": round(contribution_value, 4),
+            }
+        )
+
+    if not evidence:
+        return None
+
+    evidence_df = pd.DataFrame(evidence).sort_values("Contribution", ascending=False)
+    return evidence_df.head(top_n)
+
+
 def build_app() -> None:
     st.set_page_config(page_title=PROJECT_TITLE, layout="wide")
 
@@ -100,6 +432,12 @@ def build_app() -> None:
         administrative. Il doit etre interprete comme un outil d'orientation
         et de productivite, pas comme un conseil juridique.
         """
+    )
+
+    st.error(
+        "Perimetre actuel du MVP : cette application est concue uniquement pour "
+        "des dossiers de droit administratif. Les cas de droit du travail, penal, "
+        "famille ou contrats peuvent etre mal interpretes."
     )
 
     st.caption(
@@ -151,6 +489,9 @@ def build_app() -> None:
                 .rename_axis(TARGET_COLUMN)
                 .reset_index(name="count")
             )
+            category_counts[TARGET_COLUMN] = category_counts[TARGET_COLUMN].map(
+                _humanize_category
+            )
             st.dataframe(category_counts, width="stretch")
 
     st.subheader("Comparaison des modeles")
@@ -160,14 +501,29 @@ def build_app() -> None:
             "puis `python scripts/main.py`."
         )
     else:
-        st.dataframe(metrics_df, width="stretch")
+        st.dataframe(_format_metrics(metrics_df), width="stretch", hide_index=True)
+
+        with st.expander("Comment lire les metriques"):
+            st.markdown(
+                """
+                - `Accuracy` : part totale des predictions correctes.
+                - `F1 macro` : moyenne de l'equilibre precision/rappel sur chaque classe, utile quand les classes ne sont pas parfaitement equilibrees.
+                - `Precision macro` : quand le modele predit une classe, a quelle frequence cette prediction est correcte en moyenne.
+                - `Recall macro` : capacite du modele a retrouver chaque classe du dataset en moyenne.
+                """
+            )
 
     st.subheader("Demo interactive")
+    st.info(
+        "Le modele actuel est entraine sur des decisions de droit administratif. "
+        "Un cas relevant du droit du travail, du penal ou du droit de la famille "
+        "peut donc etre mal oriente."
+    )
     facts_summary = st.text_area(
-        "Resume les faits de l'affaire",
+        "Resume les faits de l'affaire (droit administratif uniquement)",
         placeholder=(
-            "Exemple: Un salarie conteste son licenciement apres plusieurs "
-            "heures supplementaires non payees."
+            "Exemple: Une personne conteste un refus de titre de sejour, "
+            "une decision de prefecture ou un acte administratif."
         ),
         height=160,
     )
@@ -181,22 +537,128 @@ def build_app() -> None:
             )
         else:
             predicted_category, probability_df = _predict_case(model, facts_summary)
-            st.success(f"Categorie predite: `{predicted_category}`")
+            specialist_guidance = _specialist_guidance(predicted_category)
+            domain_signal = _detect_legal_domain(facts_summary)
+            top_domain = str(domain_signal["top_domain"])
+            top_domain_score = int(domain_signal["top_score"])
+            domain_is_confident = bool(domain_signal["is_confident"])
+            st.success(
+                "Categorie predite: "
+                f"`{_humanize_category(predicted_category)}`"
+            )
+            st.caption(f"Code interne de la categorie: `{predicted_category}`")
             st.caption(f"Modele utilise: {model_config['name']}")
 
+            st.markdown("Lecture du perimetre du cas")
+            if domain_is_confident and top_domain != "administratif":
+                matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6])
+                st.error(
+                    f"Ce texte ressemble davantage a un dossier de **{top_domain}** "
+                    f"qu'a un dossier administratif. Le modele administratif est donc "
+                    f"probablement hors perimetre ici. Indices reperes : {matched_terms}."
+                )
+                st.info(
+                    f"**Specialiste plus plausible :** {DOMAIN_SPECIALISTS[top_domain]}"
+                )
+            elif top_domain == "administratif" and top_domain_score >= 2:
+                matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6])
+                st.info(
+                    "Le texte contient plusieurs indices compatibles avec le droit "
+                    f"administratif. Indices reperes : {matched_terms}."
+                )
+            else:
+                st.warning(
+                    "Le perimetre juridique du texte reste ambigu. L'orientation "
+                    "automatique doit etre lue avec prudence."
+                )
+
+            st.markdown("Orientation vers le specialiste")
+            if domain_is_confident and top_domain != "administratif":
+                st.warning(
+                    f"Je ne recommande **pas** ici un specialiste administratif comme "
+                    f"orientation principale. Le dossier semble plutot relever du "
+                    f"**{top_domain}**."
+                )
+            else:
+                st.info(
+                    f"**Specialiste recommande :** {specialist_guidance['specialist']}\n\n"
+                    f"**Pourquoi :** {specialist_guidance['orientation']}\n\n"
+                    f"**Dossiers typiques :** {specialist_guidance['examples']}"
+                )
+
             if probability_df is not None:
+                top_probability = float(probability_df.iloc[0]["probability"])
+                if top_probability < 0.55:
+                    st.warning(
+                        "Le score de confiance reste modere. Il faut lire cette "
+                        "prediction avec prudence, surtout si les faits ne relevent "
+                        "pas du droit administratif."
+                    )
+
+                st.markdown("Probabilites par categorie")
                 st.dataframe(
-                    probability_df.head(3),
+                    _format_probability_df(probability_df.head(3)),
                     width="stretch",
                     hide_index=True,
+                )
+
+            with st.expander("Pourquoi seulement 3 categories dans ce MVP ?"):
+                st.markdown(
+                    """
+                    Le corpus actuel vient surtout d'un lot Conseil d'Etat en droit administratif.
+                    Les labels du MVP derivent donc de trois grandes familles procedurales :
+
+                    - `Recours pour exces de pouvoir` : on conteste surtout la legalite d'une decision administrative.
+                    - `Plein contentieux` : on demande souvent une condamnation, une indemnisation ou une reforme plus large.
+                    - `Autres recours administratifs` : categorie residuelle pour les recours moins frequents ou plus techniques.
+
+                    Ce n'est pas encore une cartographie complete de tous les specialistes du droit francais.
+                    """
+                )
+
+            st.markdown("Pourquoi cette sortie ?")
+            st.warning(
+                "Le modele actuel est un modele lexical. Il repere surtout des "
+                "mots et groupes de mots, pas une comprehension profonde du sens "
+                "juridique. Une autre formulation des memes faits peut donc produire "
+                "un resultat different."
+            )
+            evidence_df = _top_linear_evidence(model, facts_summary, predicted_category)
+            if evidence_df is not None:
+                st.markdown(
+                    """
+                    Les termes ci-dessous sont les indices lexicaux qui ont le plus
+                    pousse le modele vers la categorie predite. Ce n'est pas une
+                    preuve de causalite juridique et ce n'est pas une lecture du sens
+                    profond du texte.
+                    """
+                )
+                st.dataframe(evidence_df, width="stretch", hide_index=True)
+            else:
+                st.info(
+                    "Le modele utilise ici ne permet pas d'afficher une explication "
+                    "lexicale detaillee pour cette prediction."
                 )
 
             outcome_df = _empirical_outcomes(dataset_df, predicted_category)
             if outcome_df is not None:
                 st.markdown(
-                    "Estimation empirique issue de cas administratifs similaires du dataset:"
+                    "Estimation empirique sur des cas administratifs similaires du dataset:"
                 )
-                st.dataframe(outcome_df, width="stretch", hide_index=True)
+                st.info(
+                    "On ne parle pas ici de `culpabilite`. En contentieux "
+                    "administratif, il faut plutot lire ce tableau comme une "
+                    "indication de qui gagne ou perd le plus souvent. Le "
+                    "`requerant` est la personne, l'entreprise ou l'entite qui a "
+                    "saisi le juge. Si l'issue est `defavorable au requerant`, cela "
+                    "veut dire que le requerant perd et que la partie defenderesse "
+                    "(souvent l'administration) est avantagée."
+                )
+                st.dataframe(
+                    _format_outcome_df(outcome_df),
+                    width="stretch",
+                    hide_index=True,
+                )
             else:
                 st.info(
                     "Pas d'estimation empirique disponible pour cette categorie."
@@ -207,6 +669,7 @@ def build_app() -> None:
         """
         - Le dataset actuel couvre surtout le droit administratif et non l'ensemble du droit francais.
         - La source officielle permet d'etendre le projet aux CAA et aux tribunaux administratifs, mais ce MVP reste centre sur le Conseil d'Etat.
+        - Le modele de base est lexical : il est sensible aux mots choisis et peut varier selon la formulation des faits.
         - Les probabilites sont des signaux statistiques, pas des certitudes.
         - Toute analyse finale doit rester sous controle humain.
         """
