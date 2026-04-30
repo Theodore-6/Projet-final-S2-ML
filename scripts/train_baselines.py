@@ -4,12 +4,13 @@ import sys
 from pathlib import Path
 
 import joblib
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.decomposition import TruncatedSVD
+from sklearn.pipeline import FeatureUnion
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Normalizer
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import Normalizer
 from sklearn.svm import LinearSVC
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -19,6 +20,7 @@ if str(SRC_DIR) not in sys.path:
 
 from config import MODELS, RANDOM_STATE
 from data import load_dataset_split
+from features import LegalSignalTransformer
 
 
 def _build_models() -> dict[str, Pipeline]:
@@ -100,6 +102,35 @@ def _build_models() -> dict[str, Pipeline]:
                     make_pipeline(
                         TruncatedSVD(n_components=128, random_state=RANDOM_STATE),
                         Normalizer(copy=False),
+                    ),
+                ),
+                (
+                    "classifier",
+                    LogisticRegression(
+                        max_iter=3000,
+                        random_state=RANDOM_STATE,
+                        class_weight="balanced",
+                    ),
+                ),
+            ]
+        ),
+        "hybrid_log_reg_legal": Pipeline(
+            steps=[
+                (
+                    "features",
+                    FeatureUnion(
+                        transformer_list=[
+                            (
+                                "word_tfidf",
+                                TfidfVectorizer(
+                                    ngram_range=(1, 2),
+                                    min_df=2,
+                                    max_df=0.95,
+                                    sublinear_tf=True,
+                                ),
+                            ),
+                            ("signals", LegalSignalTransformer()),
+                        ]
                     ),
                 ),
                 (

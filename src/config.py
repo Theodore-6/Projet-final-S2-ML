@@ -64,4 +64,9 @@ MODELS = {
         "description": "Dense semantic projection over TF-IDF features for improved robustness.",
         "path": MODELS_DIR / "lsa_log_reg_legal.joblib",
     },
+    "hybrid_log_reg_legal": {
+        "name": "Hybrid TF-IDF + Legal Signals",
+        "description": "Word-level text features reinforced with handcrafted administrative-law signals.",
+        "path": MODELS_DIR / "hybrid_log_reg_legal.joblib",
+    },
 }

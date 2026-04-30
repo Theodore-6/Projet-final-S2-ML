@@ -669,9 +669,10 @@ def _load_demo_model():
             model_key = row.get("model_key")
             model_config = MODELS.get(model_key)
             if model_config and model_config["path"].exists():
-                return model_config, load_model(model_config["path"])
+                return {**model_config, "key": model_key}, load_model(model_config["path"])
 
     for model_key in (
+        "hybrid_log_reg_legal",
         "char_svm_legal",
         "lsa_log_reg_legal",
         "linear_svm_legal",
@@ -679,7 +680,7 @@ def _load_demo_model():
     ):
         model_config = MODELS.get(model_key)
         if model_config and model_config["path"].exists():
-            return model_config, load_model(model_config["path"])
+            return {**model_config, "key": model_key}, load_model(model_config["path"])
 
     return None, None
 
@@ -1012,15 +1013,15 @@ def _top_linear_evidence(
     model, facts_summary: str, predicted_category: str, top_n: int = 6
 ) -> Optional[pd.DataFrame]:
     pipeline_steps = getattr(model, "named_steps", {})
-    vectorizer = pipeline_steps.get("tfidf")
+    feature_extractor = pipeline_steps.get("tfidf") or pipeline_steps.get("features")
     classifier = pipeline_steps.get("classifier")
     latent_step = pipeline_steps.get("lsa")
 
-    if vectorizer is None or classifier is None:
+    if feature_extractor is None or classifier is None:
         return None
 
-    if not hasattr(vectorizer, "transform") or not hasattr(
-        vectorizer, "get_feature_names_out"
+    if not hasattr(feature_extractor, "transform") or not hasattr(
+        feature_extractor, "get_feature_names_out"
     ):
         return None
 
@@ -1037,19 +1038,23 @@ def _top_linear_evidence(
     if predicted_category not in class_labels:
         return None
 
-    row = vectorizer.transform([facts_summary])
+    row = feature_extractor.transform([facts_summary])
     class_index = class_labels.index(predicted_category)
     contributions = row.multiply(classifier.coef_[class_index]).tocsr()
-    feature_names = vectorizer.get_feature_names_out()
+    feature_names = feature_extractor.get_feature_names_out()
 
     evidence = []
     for feature_index, contribution in zip(contributions.indices, contributions.data):
         contribution_value = float(contribution)
         if contribution_value <= 0:
             continue
+        feature_name = str(feature_names[feature_index])
+        feature_name = feature_name.replace("word_tfidf__", "")
+        feature_name = feature_name.replace("signals__", "")
+        feature_name = feature_name.replace("signal_", "Signal metier : ")
         evidence.append(
             {
-                "Terme repere dans le texte": feature_names[feature_index],
+                "Terme repere dans le texte": feature_name,
                 "Contribution": round(contribution_value, 4),
             }
         )
@@ -1059,6 +1064,22 @@ def _top_linear_evidence(
 
     evidence_df = pd.DataFrame(evidence).sort_values("Contribution", ascending=False)
     return evidence_df.head(top_n)
+
+
+def _model_reading_copy(model_key: str) -> tuple[str, str]:
+    if model_key == "hybrid_log_reg_legal":
+        return (
+            "Probabilites, termes du texte et signaux metier administratifs qui ont influence la sortie actuelle.",
+            "Le classifieur combine toujours un signal lexical avec quelques indices metier explicites "
+            "comme annulation, fiscalite, indemnisation ou urgence. Il reste sensible a la formulation "
+            "et ne remplace pas une qualification juridique humaine.",
+        )
+
+    return (
+        "Probabilites et indices lexicaux qui ont influence la sortie actuelle.",
+        "Le classifieur actuel reste lexical. Il repere des mots et groupes de mots, "
+        "pas une comprehension semantique profonde. Une reformulation peut donc faire varier la sortie.",
+    )
 
 
 def _render_sidebar(
@@ -1405,6 +1426,9 @@ def _render_case_studio(
         if matched_terms
         else "Peu d'indices de domaine clairement distinctifs."
     )
+    reading_subtitle, transparency_copy = _model_reading_copy(
+        model_config.get("key", "")
+    )
 
     kpi_cols = st.columns(4, gap="medium")
     with kpi_cols[0]:
@@ -1492,7 +1516,7 @@ def _render_case_studio(
         _glass_open()
         _section_header(
             "Lecture du modele",
-            "Probabilites et indices lexicaux qui ont influence la sortie actuelle.",
+            reading_subtitle,
         )
         if probability_df is not None:
             st.dataframe(
@@ -1502,13 +1526,11 @@ def _render_case_studio(
             )
 
         st.markdown(
-            """
+            f"""
             <div class="callout callout-strong" style="margin-top: 1rem; margin-bottom: 1rem;">
                 <p class="callout-title">Transparence sur la limite du modele</p>
                 <p class="callout-copy">
-                    Le classifieur actuel reste lexical. Il repere des mots et groupes de mots,
-                    pas une comprehension semantique profonde. Une reformulation peut donc faire
-                    varier la sortie.
+                    {transparency_copy}
                 </p>
             </div>
             """,
@@ -1699,7 +1721,7 @@ def build_app() -> None:
     if selected_model_key is not None:
         selected_config = MODELS.get(selected_model_key)
         if selected_config and selected_config["path"].exists():
-            model_config = selected_config
+            model_config = {**selected_config, "key": selected_model_key}
             model = load_model(selected_config["path"])
 
     _render_hero()

@@ -111,3 +111,31 @@ pension_revision,1,autres_recours,Un ancien agent public demande la revision de 
 pension_revision,2,autres_recours,Le recours concerne le calcul d une pension servie par l administration.,lsa_log_reg_legal,autres_recours,True,0.8311831733479567
 pension_revision,3,autres_recours,Le requerant conteste le montant de sa pension dans un contentieux administratif specialise.,lsa_log_reg_legal,autres_recours,True,0.6154464189431129
 pension_revision,4,autres_recours,Le dossier porte sur une pension et sur les droits ouverts a un ancien fonctionnaire.,lsa_log_reg_legal,autres_recours,True,0.7680143226337212
+titre_sejour_refus,1,exces_de_pouvoir,La prefecture refuse un titre de sejour et la personne conteste cette decision.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.49578976173430583
+titre_sejour_refus,2,exces_de_pouvoir,Un etranger attaque le refus de titre de sejour prononce par la prefecture.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.40870667338609473
+titre_sejour_refus,3,exces_de_pouvoir,Le requerant demande l annulation d un refus de sejour pris par l administration.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.3963322972047177
+titre_sejour_refus,4,exces_de_pouvoir,Apres un refus de renouvellement de titre de sejour la personne saisit le juge administratif.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.40451240328458976
+permis_construire_refus,1,exces_de_pouvoir,Une commune refuse un permis de construire et le proprietaire veut faire annuler cette decision.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.6834089180813673
+permis_construire_refus,2,exces_de_pouvoir,Le demandeur conteste devant le tribunal administratif le refus de permis de construire.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.5262554656105322
+permis_construire_refus,3,exces_de_pouvoir,Apres un arrete municipal refusant le permis de construire le requerant saisit le juge.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.6363401669513086
+permis_construire_refus,4,exces_de_pouvoir,Le proprietaire attaque un refus d autorisation d urbanisme pris par la mairie.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.4807457152324329
+oqtf_contestation,1,exces_de_pouvoir,La prefecture prend une obligation de quitter le territoire et l etranger en demande l annulation.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.3582287310397344
+oqtf_contestation,2,exces_de_pouvoir,Un recours est depose contre une OQTF prononcee par le prefet.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.38635667717850164
+oqtf_contestation,3,exces_de_pouvoir,Le requerant conteste une mesure d eloignement prise par la prefecture.,hybrid_log_reg_legal,plein_contentieux,False,0.430885670064701
+oqtf_contestation,4,exces_de_pouvoir,L administration refuse le sejour et ordonne le depart du territoire la personne saisit le juge.,hybrid_log_reg_legal,exces_de_pouvoir,True,0.48540920484529904
+hopital_indemnisation,1,plein_contentieux,Un patient demande une indemnisation apres une faute commise a l hopital public.,hybrid_log_reg_legal,plein_contentieux,True,0.4155840510814265
+hopital_indemnisation,2,plein_contentieux,La victime recherche la responsabilite de l hopital et reclame des dommages et interets.,hybrid_log_reg_legal,plein_contentieux,True,0.44160605625182847
+hopital_indemnisation,3,plein_contentieux,Apres un acte medical conteste la famille saisit le juge pour obtenir reparation.,hybrid_log_reg_legal,exces_de_pouvoir,False,0.3766430829628636
+hopital_indemnisation,4,plein_contentieux,Le dossier porte sur la condamnation d un centre hospitalier a verser une indemnite.,hybrid_log_reg_legal,plein_contentieux,True,0.38145240297543775
+marche_public_paiement,1,plein_contentieux,Une entreprise demande le paiement de sommes dues au titre d un marche public.,hybrid_log_reg_legal,plein_contentieux,True,0.44300339641638287
+marche_public_paiement,2,plein_contentieux,Le titulaire d un contrat administratif reclame une indemnisation a la personne publique.,hybrid_log_reg_legal,exces_de_pouvoir,False,0.3870490603470849
+marche_public_paiement,3,plein_contentieux,Un litige oppose une societe a une collectivite concernant l execution financiere d un marche public.,hybrid_log_reg_legal,plein_contentieux,True,0.3661142949887858
+marche_public_paiement,4,plein_contentieux,L entreprise saisit le juge administratif pour obtenir le reglement de factures impayees par l administration.,hybrid_log_reg_legal,exces_de_pouvoir,False,0.4601393190596914
+fiscal_restitution,1,plein_contentieux,Un contribuable demande la restitution d impositions qu il estime avoir payees a tort.,hybrid_log_reg_legal,plein_contentieux,True,0.5549100218009726
+fiscal_restitution,2,plein_contentieux,La societe conteste des rappels de TVA et sollicite une decharge fiscale.,hybrid_log_reg_legal,plein_contentieux,True,0.7303029599905736
+fiscal_restitution,3,plein_contentieux,Le requerant veut obtenir l annulation d un redressement fiscal et le remboursement des sommes versees.,hybrid_log_reg_legal,plein_contentieux,True,0.4513866938260752
+fiscal_restitution,4,plein_contentieux,Le litige porte sur des impots et sur une demande de decharge devant le juge administratif.,hybrid_log_reg_legal,plein_contentieux,True,0.5914801504324146
+pension_revision,1,autres_recours,Un ancien agent public demande la revision de sa pension administrative.,hybrid_log_reg_legal,autres_recours,True,0.45448317420619605
+pension_revision,2,autres_recours,Le recours concerne le calcul d une pension servie par l administration.,hybrid_log_reg_legal,autres_recours,True,0.44251508063071326
+pension_revision,3,autres_recours,Le requerant conteste le montant de sa pension dans un contentieux administratif specialise.,hybrid_log_reg_legal,autres_recours,True,0.4005539528485911
+pension_revision,4,autres_recours,Le dossier porte sur une pension et sur les droits ouverts a un ancien fonctionnaire.,hybrid_log_reg_legal,autres_recours,True,0.4440451711444988
