@@ -11,6 +11,8 @@ import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
 
 from config import (
+    CLASS_METRICS_FILE,
+    CONFUSION_MATRIX_FILE,
     DATA_DIR,
     MODEL_METRICS_FILE,
     MODELS,
@@ -852,6 +854,18 @@ def _load_robustness_metrics() -> Optional[pd.DataFrame]:
     return pd.read_csv(ROBUSTNESS_METRICS_FILE)
 
 
+def _load_class_metrics() -> Optional[pd.DataFrame]:
+    if not CLASS_METRICS_FILE.exists():
+        return None
+    return pd.read_csv(CLASS_METRICS_FILE)
+
+
+def _load_confusion_matrix() -> Optional[pd.DataFrame]:
+    if not CONFUSION_MATRIX_FILE.exists():
+        return None
+    return pd.read_csv(CONFUSION_MATRIX_FILE)
+
+
 def _load_reference_metadata() -> Optional[pd.DataFrame]:
     if not REFERENCE_METADATA_FILE.exists():
         return None
@@ -962,6 +976,95 @@ def _format_metrics(metrics_df: pd.DataFrame) -> pd.DataFrame:
     }
     keep_columns = [column for column in rename_map if column in display_df.columns]
     return display_df[keep_columns].rename(columns=rename_map)
+
+
+def _format_class_metrics(
+    class_metrics_df: pd.DataFrame, selected_model_key: Optional[str] = None
+) -> pd.DataFrame:
+    display_df = class_metrics_df.copy()
+    if selected_model_key:
+        display_df = display_df[display_df["model_key"] == selected_model_key]
+
+    if display_df.empty:
+        return display_df
+
+    display_df["case_category"] = display_df["case_category"].map(_humanize_category)
+    for column in ("precision", "recall", "f1_score"):
+        display_df[column] = (display_df[column] * 100).round(1)
+
+    return display_df.rename(
+        columns={
+            "case_category": "Classe",
+            "precision": "Precision (%)",
+            "recall": "Recall (%)",
+            "f1_score": "F1 (%)",
+            "support": "Support",
+        }
+    )[
+        ["Classe", "Precision (%)", "Recall (%)", "F1 (%)", "Support"]
+    ]
+
+
+def _build_confusion_chart(
+    confusion_df: Optional[pd.DataFrame], selected_model_key: Optional[str]
+) -> go.Figure:
+    figure = go.Figure()
+    if confusion_df is None or confusion_df.empty or selected_model_key is None:
+        figure.update_layout(
+            height=360,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    model_df = confusion_df[confusion_df["model_key"] == selected_model_key].copy()
+    if model_df.empty:
+        figure.update_layout(
+            height=360,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    category_columns = [
+        column
+        for column in model_df.columns
+        if column not in {"actual_category", "model_key", "model_name"}
+    ]
+    heatmap_df = model_df.set_index("actual_category")[category_columns]
+    heatmap_df.index = [_humanize_category(value) for value in heatmap_df.index]
+    heatmap_df.columns = [_humanize_category(value) for value in heatmap_df.columns]
+
+    figure = go.Figure(
+        data=[
+            go.Heatmap(
+                z=heatmap_df.values,
+                x=heatmap_df.columns.tolist(),
+                y=heatmap_df.index.tolist(),
+                colorscale=[
+                    [0.0, "rgba(226,232,240,0.35)"],
+                    [0.5, "rgba(148,163,184,0.62)"],
+                    [1.0, "rgba(15,23,42,0.92)"],
+                ],
+                text=heatmap_df.values,
+                texttemplate="%{text}",
+                hovertemplate="Reel: %{y}<br>Predit: %{x}<br>Count: %{z}<extra></extra>",
+            )
+        ]
+    )
+    figure.update_layout(
+        height=360,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title="Prediction", color="#667085"),
+        yaxis=dict(title="Reel", color="#667085"),
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
 
 
 def _build_metrics_chart(metrics_df: Optional[pd.DataFrame]) -> go.Figure:
@@ -1809,6 +1912,9 @@ def _render_corpus(
     dataset_df: Optional[pd.DataFrame],
     metrics_df: Optional[pd.DataFrame],
     robustness_df: Optional[pd.DataFrame],
+    class_metrics_df: Optional[pd.DataFrame],
+    confusion_df: Optional[pd.DataFrame],
+    selected_model_key: Optional[str],
 ) -> None:
     left, right = st.columns((1.1, 0.9), gap="large")
 
@@ -1879,6 +1985,42 @@ def _render_corpus(
                 width="stretch",
                 hide_index=True,
             )
+    _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    lower_left, lower_right = st.columns((0.95, 1.05), gap="large")
+
+    with lower_left:
+        _glass_open()
+        _section_header(
+            "Metriques par classe",
+            "Ou le modele est fort ou fragile selon chaque famille de recours.",
+        )
+        if class_metrics_df is not None and not class_metrics_df.empty:
+            formatted_class_metrics = _format_class_metrics(
+                class_metrics_df,
+                selected_model_key,
+            )
+            if not formatted_class_metrics.empty:
+                st.dataframe(
+                    formatted_class_metrics,
+                    width="stretch",
+                    hide_index=True,
+                )
+            else:
+                st.info("Aucune metrique par classe disponible pour ce modele.")
+        else:
+            st.info("Metriques par classe indisponibles.")
+        _glass_close()
+
+    with lower_right:
+        _glass_open()
+        _section_header(
+            "Matrice de confusion",
+            "Lecture rapide des confusions entre familles de recours sur le jeu de test.",
+        )
+        confusion_chart = _build_confusion_chart(confusion_df, selected_model_key)
+        st.plotly_chart(confusion_chart, width="stretch", config={"displayModeBar": False})
         _glass_close()
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
@@ -1922,6 +2064,8 @@ def build_app() -> None:
     reference_df = _load_reference_metadata()
     metrics_df = _load_metrics()
     robustness_df = _load_robustness_metrics()
+    class_metrics_df = _load_class_metrics()
+    confusion_df = _load_confusion_matrix()
     model_config, model = _load_demo_model()
 
     section, selected_model_key = _render_sidebar(dataset_df, metrics_df)
@@ -1940,7 +2084,17 @@ def build_app() -> None:
     elif section == "Case Studio":
         _render_case_studio(dataset_df, reference_df, model_config, model)
     else:
-        _render_corpus(dataset_df, metrics_df, robustness_df)
+        active_model_key = selected_model_key or (
+            model_config.get("key") if model_config is not None else None
+        )
+        _render_corpus(
+            dataset_df,
+            metrics_df,
+            robustness_df,
+            class_metrics_df,
+            confusion_df,
+            active_model_key,
+        )
 
 
 if __name__ == "__main__":

@@ -27,6 +27,8 @@ ENV_FILE = PROJECT_ROOT / ".env"
 APP_ENTRYPOINT = PROJECT_ROOT / "src" / "app.py"
 MODEL_METRICS_FILE = RESULTS_DIR / "model_metrics.csv"
 ROBUSTNESS_METRICS_FILE = RESULTS_DIR / "robustness_metrics.csv"
+CLASS_METRICS_FILE = RESULTS_DIR / "class_metrics.csv"
+CONFUSION_MATRIX_FILE = RESULTS_DIR / "confusion_matrix.csv"
 PROCESSED_DATA_FILE = DATA_DIR / "processed_legal_cases_admin.csv"
 
 STREAMLIT_HOST = "localhost"

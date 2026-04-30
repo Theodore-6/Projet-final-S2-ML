@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from dotenv import load_dotenv
 
 
@@ -43,8 +44,12 @@ results_module = _load_module("project_results", SRC_DIR / "results.py")
 
 load_dataset_split = data_module.load_dataset_split
 compute_metrics = metrics_module.compute_metrics
+compute_class_metrics = metrics_module.compute_class_metrics
+compute_confusion_df = metrics_module.compute_confusion_df
 load_model = model_io_module.load_model
 write_metrics = results_module.write_metrics
+write_class_metrics = results_module.write_class_metrics
+write_confusion_matrix = results_module.write_confusion_matrix
 
 
 def _validate_models_config() -> None:
@@ -86,8 +91,12 @@ def _load_dataset() -> tuple[Any, Any, Any, Any]:
     return dataset_split
 
 
-def _evaluate_models(X_test: Any, y_test: Any) -> list[dict[str, object]]:
+def _evaluate_models(
+    X_test: Any, y_test: Any
+) -> tuple[list[dict[str, object]], list[pd.DataFrame], list[pd.DataFrame]]:
     rows: list[dict[str, object]] = []
+    class_metric_frames = []
+    confusion_frames = []
 
     for model_key, model_config in MODELS.items():
         model = load_model(Path(model_config["path"]))
@@ -99,6 +108,8 @@ def _evaluate_models(X_test: Any, y_test: Any) -> list[dict[str, object]]:
 
         y_pred = model.predict(X_test)
         metrics = compute_metrics(y_test, y_pred)
+        class_metrics_df = compute_class_metrics(y_test, y_pred)
+        confusion_df = compute_confusion_df(y_test, y_pred)
 
         if not isinstance(metrics, dict) or not metrics:
             raise ValueError(
@@ -115,8 +126,20 @@ def _evaluate_models(X_test: Any, y_test: Any) -> list[dict[str, object]]:
             row[metric_name] = float(metric_value)
 
         rows.append(row)
+        class_metric_frames.append(
+            class_metrics_df.assign(
+                model_key=model_key,
+                model_name=model_config.get("name", model_key),
+            )
+        )
+        confusion_frames.append(
+            confusion_df.assign(
+                model_key=model_key,
+                model_name=model_config.get("name", model_key),
+            )
+        )
 
-    return rows
+    return rows, class_metric_frames, confusion_frames
 
 
 def _launch_streamlit() -> None:
@@ -167,7 +190,9 @@ def main() -> None:
         ) from exc
 
     try:
-        metrics_rows = _evaluate_models(X_test, y_test)
+        metrics_rows, class_metric_frames, confusion_frames = _evaluate_models(
+            X_test, y_test
+        )
     except NotImplementedError as exc:
         raise NotImplementedError(
             "Metric computation is still a template placeholder. "
@@ -175,9 +200,19 @@ def main() -> None:
         ) from exc
 
     metrics_df = write_metrics(metrics_rows)
+    class_metrics_df = write_class_metrics(
+        pd.concat(class_metric_frames, ignore_index=True)
+    )
+    confusion_df = write_confusion_matrix(
+        pd.concat(confusion_frames, ignore_index=True)
+    )
 
     print("Model evaluation completed. Metrics saved to results/model_metrics.csv")
     print(metrics_df.to_string(index=False))
+    print("\nSaved detailed class metrics to results/class_metrics.csv")
+    print(class_metrics_df.head(12).to_string(index=False))
+    print("\nSaved confusion matrices to results/confusion_matrix.csv")
+    print(confusion_df.head(12).to_string(index=False))
     if args.no_streamlit:
         return
 

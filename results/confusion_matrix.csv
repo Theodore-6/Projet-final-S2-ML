@@ -1,0 +1,16 @@
+actual_category,autres_recours,exces_de_pouvoir,plein_contentieux,model_key,model_name
+autres_recours,4,3,0,log_reg_legal,TF-IDF + Logistic Regression
+exces_de_pouvoir,2,78,6,log_reg_legal,TF-IDF + Logistic Regression
+plein_contentieux,0,11,82,log_reg_legal,TF-IDF + Logistic Regression
+autres_recours,3,4,0,linear_svm_legal,TF-IDF + Linear SVM
+exces_de_pouvoir,1,75,10,linear_svm_legal,TF-IDF + Linear SVM
+plein_contentieux,0,10,83,linear_svm_legal,TF-IDF + Linear SVM
+autres_recours,3,4,0,char_svm_legal,Character TF-IDF + Linear SVM
+exces_de_pouvoir,0,77,9,char_svm_legal,Character TF-IDF + Linear SVM
+plein_contentieux,0,10,83,char_svm_legal,Character TF-IDF + Linear SVM
+autres_recours,5,2,0,lsa_log_reg_legal,Latent Semantic TF-IDF + Logistic Regression
+exces_de_pouvoir,6,73,7,lsa_log_reg_legal,Latent Semantic TF-IDF + Logistic Regression
+plein_contentieux,0,8,85,lsa_log_reg_legal,Latent Semantic TF-IDF + Logistic Regression
+autres_recours,5,2,0,hybrid_log_reg_legal,Hybrid TF-IDF + Legal Signals
+exces_de_pouvoir,2,78,6,hybrid_log_reg_legal,Hybrid TF-IDF + Legal Signals
+plein_contentieux,0,11,82,hybrid_log_reg_legal,Hybrid TF-IDF + Legal Signals

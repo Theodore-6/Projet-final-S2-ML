@@ -8,7 +8,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_recall_fscore_support,
+    precision_score,
+    recall_score,
+)
 
 
 def compute_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
@@ -35,3 +43,31 @@ def compute_metrics(y_true: Any, y_pred: Any) -> dict[str, float]:
             y_true, y_pred, average="macro", zero_division=0
         ),
     }
+
+
+def compute_class_metrics(y_true: Any, y_pred: Any) -> pd.DataFrame:
+    labels = sorted(pd.Series(y_true).astype(str).unique().tolist())
+    precision, recall, f1, support = precision_recall_fscore_support(
+        y_true,
+        y_pred,
+        labels=labels,
+        zero_division=0,
+    )
+
+    return pd.DataFrame(
+        {
+            "case_category": labels,
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+            "support": support,
+        }
+    )
+
+
+def compute_confusion_df(y_true: Any, y_pred: Any) -> pd.DataFrame:
+    labels = sorted(pd.Series(y_true).astype(str).unique().tolist())
+    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    confusion_df = pd.DataFrame(matrix, index=labels, columns=labels)
+    confusion_df.index.name = "actual_category"
+    return confusion_df.reset_index()
