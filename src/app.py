@@ -1177,6 +1177,206 @@ def _build_category_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     return figure
 
 
+def _build_text_length_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
+    figure = go.Figure()
+
+    if dataset_df is None or dataset_df.empty or "text_length" not in dataset_df.columns:
+        figure.update_layout(
+            height=340,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    chart_df = dataset_df.copy()
+    chart_df["Categorie"] = chart_df[TARGET_COLUMN].map(_humanize_category)
+
+    ordered_labels = [
+        _humanize_category(category)
+        for category in dataset_df[TARGET_COLUMN].value_counts().index.tolist()
+    ]
+    colors = {
+        "Recours pour exces de pouvoir": "rgba(15, 23, 42, 0.82)",
+        "Plein contentieux": "rgba(99, 102, 241, 0.52)",
+        "Autres recours administratifs": "rgba(148, 163, 184, 0.88)",
+    }
+
+    for label in ordered_labels:
+        label_df = chart_df[chart_df["Categorie"] == label]
+        figure.add_trace(
+            go.Box(
+                x=label_df["text_length"],
+                name=label,
+                marker_color=colors.get(label, "rgba(15, 23, 42, 0.72)"),
+                line=dict(width=1.3),
+                boxmean=True,
+                hovertemplate="%{x} caracteres<extra>" + label + "</extra>",
+            )
+        )
+
+    figure.update_layout(
+        height=340,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            title="Longueur du resume (caracteres)",
+            showgrid=True,
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            zeroline=False,
+            color="#667085",
+        ),
+        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
+def _build_outcome_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
+    figure = go.Figure()
+
+    if dataset_df is None or dataset_df.empty or OUTCOME_COLUMN not in dataset_df.columns:
+        figure.update_layout(
+            height=340,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    chart_df = (
+        dataset_df[OUTCOME_COLUMN]
+        .value_counts()
+        .rename_axis("outcome")
+        .reset_index(name="count")
+        .head(6)
+    )
+    chart_df["label"] = chart_df["outcome"].map(_humanize_outcome)
+    chart_df = chart_df.sort_values("count", ascending=True)
+
+    figure.add_trace(
+        go.Bar(
+            x=chart_df["count"],
+            y=chart_df["label"],
+            orientation="h",
+            marker=dict(
+                color="rgba(15, 23, 42, 0.86)",
+                line=dict(color="rgba(255,255,255,0.85)", width=1.2),
+            ),
+            hovertemplate="%{y}<br>%{x} decisions<extra></extra>",
+        )
+    )
+
+    figure.update_layout(
+        height=340,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        bargap=0.34,
+        xaxis=dict(
+            title="Nombre de decisions",
+            showgrid=True,
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            zeroline=False,
+            color="#667085",
+        ),
+        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
+def _dataset_profile_table(dataset_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if dataset_df is None or dataset_df.empty:
+        return pd.DataFrame()
+
+    date_series = dataset_df["date_lecture"].dropna().astype(str)
+    if date_series.empty:
+        period_label = "non renseignee"
+    else:
+        period_label = f"{date_series.min()} -> {date_series.max()}"
+
+    median_length = (
+        int(dataset_df["text_length"].median())
+        if "text_length" in dataset_df.columns
+        else 0
+    )
+    mean_length = (
+        int(dataset_df["text_length"].mean())
+        if "text_length" in dataset_df.columns
+        else 0
+    )
+
+    profile_rows = [
+        {
+            "Indicateur": "Nombre de decisions",
+            "Valeur": f"{len(dataset_df)}",
+        },
+        {
+            "Indicateur": "Longueur mediane du resume",
+            "Valeur": f"{median_length:,} caracteres".replace(",", " "),
+        },
+        {
+            "Indicateur": "Longueur moyenne du resume",
+            "Valeur": f"{mean_length:,} caracteres".replace(",", " "),
+        },
+        {
+            "Indicateur": "Periode couverte",
+            "Valeur": period_label,
+        },
+        {
+            "Indicateur": "Issue la plus frequente",
+            "Valeur": _humanize_outcome(
+                str(dataset_df[OUTCOME_COLUMN].value_counts().index[0])
+            ),
+        },
+        {
+            "Indicateur": "Categorie la plus frequente",
+            "Valeur": _humanize_category(
+                str(dataset_df[TARGET_COLUMN].value_counts().index[0])
+            ),
+        },
+    ]
+    return pd.DataFrame(profile_rows)
+
+
+def _typical_examples_df(dataset_df: Optional[pd.DataFrame]) -> pd.DataFrame:
+    if dataset_df is None or dataset_df.empty:
+        return pd.DataFrame()
+
+    examples = []
+    for category in dataset_df[TARGET_COLUMN].value_counts().index.tolist():
+        category_df = dataset_df[dataset_df[TARGET_COLUMN] == category].copy()
+        if category_df.empty:
+            continue
+        category_df["rule_strength"] = category_df[TEXT_COLUMN].astype(str).apply(
+            lambda text: _admin_rule_scores(text)[0].get(str(category), 0.0)
+        )
+        category_df["distance_to_median"] = (
+            category_df["text_length"] - category_df["text_length"].median()
+        ).abs()
+        example_row = category_df.sort_values(
+            ["rule_strength", "distance_to_median"],
+            ascending=[False, True],
+        ).iloc[0]
+        examples.append(
+            {
+                "Categorie": _humanize_category(str(category)),
+                "Issue observee": _humanize_outcome(str(example_row[OUTCOME_COLUMN])),
+                "Exemple de faits": str(example_row[TEXT_COLUMN])[:260].strip() + "...",
+            }
+        )
+
+    return pd.DataFrame(examples)
+
+
 def _predict_case(model, facts_summary: str) -> tuple[str, Optional[pd.DataFrame]]:
     triage = _triage_case(model, facts_summary)
     return str(triage["final_category"]), triage["probability_df"]
@@ -1916,18 +2116,18 @@ def _render_corpus(
     confusion_df: Optional[pd.DataFrame],
     selected_model_key: Optional[str],
 ) -> None:
+    profile_df = _dataset_profile_table(dataset_df)
+    examples_df = _typical_examples_df(dataset_df)
     left, right = st.columns((1.1, 0.9), gap="large")
 
     with left:
         _glass_open()
         _section_header(
-            "Apercu du dataset",
-            "Vue rapide sur les donnees qui alimentent le moteur de triage.",
+            "Profil du corpus",
+            "Lecture rapide de la matiere premiere qui alimente le moteur de triage.",
         )
-        if dataset_df is not None and not dataset_df.empty:
-            preview_df = dataset_df.head(8).copy()
-            preview_df[TARGET_COLUMN] = preview_df[TARGET_COLUMN].map(_humanize_category)
-            st.dataframe(preview_df, width="stretch", hide_index=True)
+        if not profile_df.empty:
+            st.dataframe(profile_df, width="stretch", hide_index=True)
         else:
             st.info("Dataset indisponible.")
         _glass_close()
@@ -1986,6 +2186,63 @@ def _render_corpus(
                 hide_index=True,
             )
     _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    upper_left, upper_right = st.columns((1, 1), gap="large")
+
+    with upper_left:
+        _glass_open()
+        _section_header(
+            "Distribution des categories",
+            "Equilibre du corpus entre les trois familles de recours administatifs.",
+        )
+        st.plotly_chart(
+            _build_category_chart(dataset_df),
+            width="stretch",
+            config={"displayModeBar": False},
+        )
+        _glass_close()
+
+    with upper_right:
+        _glass_open()
+        _section_header(
+            "Longueur des resumes",
+            "Dispersion de la longueur des decisions resumees selon la categorie.",
+        )
+        st.plotly_chart(
+            _build_text_length_chart(dataset_df),
+            width="stretch",
+            config={"displayModeBar": False},
+        )
+        _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    outcome_left, outcome_right = st.columns((1, 1), gap="large")
+
+    with outcome_left:
+        _glass_open()
+        _section_header(
+            "Issues observees",
+            "Vue rapide des solutions les plus frequentes dans les decisions du corpus.",
+        )
+        st.plotly_chart(
+            _build_outcome_chart(dataset_df),
+            width="stretch",
+            config={"displayModeBar": False},
+        )
+        _glass_close()
+
+    with outcome_right:
+        _glass_open()
+        _section_header(
+            "Exemples typiques",
+            "Un exemple representatif par famille de recours pour lire concretement le corpus.",
+        )
+        if not examples_df.empty:
+            st.dataframe(examples_df, width="stretch", hide_index=True)
+        else:
+            st.info("Exemples indisponibles.")
+        _glass_close()
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     lower_left, lower_right = st.columns((0.95, 1.05), gap="large")
