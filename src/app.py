@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -179,6 +180,82 @@ DOMAIN_KEYWORDS = {
         "succession",
         "tutelle",
     ],
+}
+
+ADMIN_CATEGORY_RULES = {
+    "exces_de_pouvoir": {
+        "decision": [
+            "refus",
+            "annulation",
+            "annuler",
+            "arrete",
+            "decret",
+            "decision",
+            "autorisation",
+            "permis",
+            "sanction",
+            "oqtf",
+        ],
+        "autority": [
+            "prefet",
+            "prefecture",
+            "ministre",
+            "maire",
+            "recteur",
+            "administration",
+            "office francais",
+        ],
+        "immigration": [
+            "titre de sejour",
+            "sejour",
+            "visa",
+            "asile",
+            "etranger",
+        ],
+    },
+    "plein_contentieux": {
+        "money": [
+            "indemnisation",
+            "indemnitaire",
+            "condamnation",
+            "condamner",
+            "verser",
+            "somme",
+            "euros",
+            "interets",
+            "remboursement",
+        ],
+        "harm": [
+            "prejudice",
+            "dommage",
+            "responsabilite",
+            "faute",
+            "reparation",
+        ],
+        "fiscal_social": [
+            "impot",
+            "cotisation",
+            "taxe",
+            "decharge",
+            "allocation",
+            "pension",
+            "chomage",
+            "marche public",
+        ],
+    },
+    "autres_recours": {
+        "procedure": [
+            "renvoi",
+            "sursis a statuer",
+            "question prejudicielle",
+            "avis contentieux",
+            "interpretation",
+            "execution",
+            "tribunal des pensions",
+            "cour d'appel",
+            "prud'hommes",
+        ]
+    },
 }
 
 DOMAIN_SPECIALISTS = {
@@ -627,6 +704,136 @@ def _specialist_guidance(predicted_category: str) -> dict[str, str]:
     )
 
 
+def _generic_admin_specialist() -> dict[str, str]:
+    return {
+        "specialist": "Qualification administrative a confirmer",
+        "orientation": (
+            "Le dossier semble administratif mais la famille de recours reste trop "
+            "incertaine pour orienter vers un specialiste plus fin sans revue humaine."
+        ),
+        "examples": (
+            "Fais relire le dossier pour arbitrer entre annulation d'une decision, "
+            "contentieux indemnitaire, fiscal ou recours proceduraux techniques."
+        ),
+    }
+
+
+def _get_similarity_vectorizer(model):
+    pipeline_steps = getattr(model, "named_steps", {})
+    direct_vectorizer = pipeline_steps.get("tfidf")
+    if direct_vectorizer is not None and hasattr(direct_vectorizer, "transform"):
+        return direct_vectorizer
+
+    feature_union = pipeline_steps.get("features")
+    transformer_list = getattr(feature_union, "transformer_list", [])
+    for name, transformer in transformer_list:
+        if name == "word_tfidf" and hasattr(transformer, "transform"):
+            return transformer
+
+    return None
+
+
+def _base_probability_df(model, facts_summary: str) -> Optional[pd.DataFrame]:
+    labels = getattr(model, "classes_", None)
+    if labels is None:
+        return None
+
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba([facts_summary])[0]
+    elif hasattr(model, "decision_function"):
+        decision_scores = model.decision_function([facts_summary])
+        decision_scores = np.asarray(decision_scores)
+        if decision_scores.ndim == 1:
+            decision_scores = decision_scores.reshape(1, -1)
+        stabilized = decision_scores[0] - np.max(decision_scores[0])
+        exp_scores = np.exp(stabilized)
+        probabilities = exp_scores / exp_scores.sum()
+    else:
+        return None
+
+    return pd.DataFrame(
+        {"case_category": labels, "probability": probabilities}
+    ).sort_values("probability", ascending=False)
+
+
+def _admin_rule_scores(facts_summary: str) -> tuple[dict[str, float], dict[str, list[str]]]:
+    normalized = _normalize_text(facts_summary)
+    scores: dict[str, float] = {}
+    matches: dict[str, list[str]] = {}
+
+    for category, groups in ADMIN_CATEGORY_RULES.items():
+        group_scores = []
+        category_matches: list[str] = []
+        for keywords in groups.values():
+            group_matches = [keyword for keyword in keywords if keyword in normalized]
+            group_scores.append(len(group_matches) / max(len(keywords), 1))
+            category_matches.extend(group_matches)
+
+        max_group_score = max(group_scores) if group_scores else 0.0
+        avg_group_score = sum(group_scores) / len(group_scores) if group_scores else 0.0
+        scores[category] = round((0.65 * max_group_score) + (0.35 * avg_group_score), 4)
+        matches[category] = list(dict.fromkeys(category_matches))
+
+    return scores, matches
+
+
+def _triage_case(model, facts_summary: str) -> dict[str, object]:
+    model_prediction = model.predict([facts_summary])[0]
+    probability_df = _base_probability_df(model, facts_summary)
+
+    base_scores = {
+        category: 0.0 for category in CATEGORY_LABELS
+    }
+    if probability_df is not None:
+        for row in probability_df.itertuples(index=False):
+            base_scores[str(row.case_category)] = float(row.probability)
+    else:
+        base_scores[model_prediction] = 1.0
+
+    rule_scores, rule_matches = _admin_rule_scores(facts_summary)
+    combined_scores = {}
+    for category in CATEGORY_LABELS:
+        combined_scores[category] = (0.55 * base_scores.get(category, 0.0)) + (
+            0.45 * rule_scores.get(category, 0.0)
+        )
+
+    total_score = sum(combined_scores.values())
+    if total_score > 0:
+        normalized_scores = {
+            category: score / total_score for category, score in combined_scores.items()
+        }
+    else:
+        normalized_scores = combined_scores
+
+    blended_df = (
+        pd.DataFrame(
+            {
+                "case_category": list(normalized_scores.keys()),
+                "probability": list(normalized_scores.values()),
+            }
+        )
+        .sort_values("probability", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    final_category = str(blended_df.iloc[0]["case_category"])
+    final_confidence = float(blended_df.iloc[0]["probability"])
+    second_confidence = (
+        float(blended_df.iloc[1]["probability"]) if len(blended_df) > 1 else 0.0
+    )
+
+    return {
+        "model_prediction": model_prediction,
+        "final_category": final_category,
+        "probability_df": blended_df,
+        "base_probability_df": probability_df,
+        "rule_scores": rule_scores,
+        "rule_matches": rule_matches,
+        "final_confidence": final_confidence,
+        "final_margin": final_confidence - second_confidence,
+    }
+
+
 def _load_dataset() -> Optional[pd.DataFrame]:
     if not PROCESSED_DATA_FILE.exists():
         return None
@@ -868,17 +1075,8 @@ def _build_category_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
 
 
 def _predict_case(model, facts_summary: str) -> tuple[str, Optional[pd.DataFrame]]:
-    prediction = model.predict([facts_summary])[0]
-
-    if not hasattr(model, "predict_proba"):
-        return prediction, None
-
-    probabilities = model.predict_proba([facts_summary])[0]
-    labels = model.classes_
-    probability_df = pd.DataFrame(
-        {"case_category": labels, "probability": probabilities}
-    ).sort_values("probability", ascending=False)
-    return prediction, probability_df
+    triage = _triage_case(model, facts_summary)
+    return str(triage["final_category"]), triage["probability_df"]
 
 
 def _empirical_outcomes(
@@ -948,8 +1146,7 @@ def _find_similar_jurisprudence(
     if dataset_df is None or dataset_df.empty:
         return None
 
-    pipeline_steps = getattr(model, "named_steps", {})
-    vectorizer = pipeline_steps.get("tfidf")
+    vectorizer = _get_similarity_vectorizer(model)
     if vectorizer is None or not hasattr(vectorizer, "transform"):
         return None
 
@@ -1396,19 +1593,24 @@ def _render_case_studio(
         _glass_close()
         return
 
-    predicted_category, probability_df = _predict_case(model, facts_summary)
+    triage_result = _triage_case(model, facts_summary)
+    predicted_category = str(triage_result["final_category"])
+    probability_df = triage_result["probability_df"]
     domain_signal = _detect_legal_domain(facts_summary)
     specialist_guidance = _specialist_guidance(predicted_category)
     top_domain = str(domain_signal["top_domain"])
     is_confident = bool(domain_signal["is_confident"])
     matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6]) or "aucun terme fort"
+    rule_matches = triage_result["rule_matches"].get(predicted_category, [])
 
     if probability_df is not None:
-        top_probability = float(probability_df.iloc[0]["probability"])
+        top_probability = float(triage_result["final_confidence"])
         confidence_display = f"{top_probability * 100:.1f}%"
     else:
         top_probability = 0.0
         confidence_display = "n/a"
+    final_margin = float(triage_result["final_margin"])
+    rule_display = ", ".join(rule_matches[:5]) if rule_matches else "pas de signal metier fort"
 
     if is_confident and top_domain != "administratif":
         specialist_title = DOMAIN_SPECIALISTS[top_domain]
@@ -1416,6 +1618,10 @@ def _render_case_studio(
             "Le texte ressemble davantage a un dossier hors perimetre administratif. "
             "Cette orientation doit primer sur la prediction du classifieur administratif."
         )
+    elif top_probability < 0.5 or final_margin < 0.1:
+        generic_guidance = _generic_admin_specialist()
+        specialist_title = generic_guidance["specialist"]
+        specialist_copy = generic_guidance["orientation"]
     else:
         specialist_title = specialist_guidance["specialist"]
         specialist_copy = specialist_guidance["orientation"]
@@ -1434,9 +1640,9 @@ def _render_case_studio(
     with kpi_cols[0]:
         st.markdown(
             _signal_card(
-                "Categorie predite",
+                "Categorie de triage",
                 _humanize_category(predicted_category),
-                f"Code interne : {predicted_category}",
+                f"Code interne : {predicted_category} | Regles reperees : {rule_display}",
             ),
             unsafe_allow_html=True,
         )
@@ -1454,7 +1660,7 @@ def _render_case_studio(
             _signal_card(
                 "Confiance",
                 confidence_display,
-                "Mesure issue des probabilites du modele lorsqu'elles sont disponibles.",
+                "Score combine modele + regles metier, puis normalise pour le triage.",
             ),
             unsafe_allow_html=True,
         )
@@ -1482,14 +1688,15 @@ def _render_case_studio(
             """,
             unsafe_allow_html=True,
         )
-    elif top_probability < 0.55:
+    elif top_probability < 0.5 or final_margin < 0.1:
         st.markdown(
             """
             <div class="callout callout-strong" style="margin-top: 1rem;">
                 <p class="callout-title">Confiance moderee</p>
                 <p class="callout-copy">
-                    Le modele hesite encore. Utilise la sortie comme un signal de triage,
-                    pas comme une conclusion juridique.
+                    Le triage hesite encore. Utilise la sortie comme un signal de triage,
+                    pas comme une conclusion juridique. L'orientation specialistique reste
+                    volontairement prudente dans cette zone.
                 </p>
             </div>
             """,
