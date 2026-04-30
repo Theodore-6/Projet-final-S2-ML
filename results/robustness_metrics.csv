@@ -1,0 +1,5 @@
+model_key,accuracy_expected_category,paraphrase_consistency,mean_top_probability,model_name
+log_reg_legal,0.5357142857142857,0.8214285714285714,0.4762014334942844,TF-IDF + Logistic Regression
+linear_svm_legal,0.5357142857142857,0.7857142857142857,,TF-IDF + Linear SVM
+char_svm_legal,0.4642857142857143,0.8571428571428571,,Character TF-IDF + Linear SVM
+lsa_log_reg_legal,0.6785714285714286,0.7142857142857143,0.6820144328045984,Latent Semantic TF-IDF + Logistic Regression

@@ -1,0 +1,29 @@
+case_id,variant_id,expected_category,facts_summary
+titre_sejour_refus,1,exces_de_pouvoir,La prefecture refuse un titre de sejour et la personne conteste cette decision.
+titre_sejour_refus,2,exces_de_pouvoir,Un etranger attaque le refus de titre de sejour prononce par la prefecture.
+titre_sejour_refus,3,exces_de_pouvoir,Le requerant demande l annulation d un refus de sejour pris par l administration.
+titre_sejour_refus,4,exces_de_pouvoir,Apres un refus de renouvellement de titre de sejour la personne saisit le juge administratif.
+permis_construire_refus,1,exces_de_pouvoir,Une commune refuse un permis de construire et le proprietaire veut faire annuler cette decision.
+permis_construire_refus,2,exces_de_pouvoir,Le demandeur conteste devant le tribunal administratif le refus de permis de construire.
+permis_construire_refus,3,exces_de_pouvoir,Apres un arrete municipal refusant le permis de construire le requerant saisit le juge.
+permis_construire_refus,4,exces_de_pouvoir,Le proprietaire attaque un refus d autorisation d urbanisme pris par la mairie.
+oqtf_contestation,1,exces_de_pouvoir,La prefecture prend une obligation de quitter le territoire et l etranger en demande l annulation.
+oqtf_contestation,2,exces_de_pouvoir,Un recours est depose contre une OQTF prononcee par le prefet.
+oqtf_contestation,3,exces_de_pouvoir,Le requerant conteste une mesure d eloignement prise par la prefecture.
+oqtf_contestation,4,exces_de_pouvoir,L administration refuse le sejour et ordonne le depart du territoire la personne saisit le juge.
+hopital_indemnisation,1,plein_contentieux,Un patient demande une indemnisation apres une faute commise a l hopital public.
+hopital_indemnisation,2,plein_contentieux,La victime recherche la responsabilite de l hopital et reclame des dommages et interets.
+hopital_indemnisation,3,plein_contentieux,Apres un acte medical conteste la famille saisit le juge pour obtenir reparation.
+hopital_indemnisation,4,plein_contentieux,Le dossier porte sur la condamnation d un centre hospitalier a verser une indemnite.
+marche_public_paiement,1,plein_contentieux,Une entreprise demande le paiement de sommes dues au titre d un marche public.
+marche_public_paiement,2,plein_contentieux,Le titulaire d un contrat administratif reclame une indemnisation a la personne publique.
+marche_public_paiement,3,plein_contentieux,Un litige oppose une societe a une collectivite concernant l execution financiere d un marche public.
+marche_public_paiement,4,plein_contentieux,L entreprise saisit le juge administratif pour obtenir le reglement de factures impayees par l administration.
+fiscal_restitution,1,plein_contentieux,Un contribuable demande la restitution d impositions qu il estime avoir payees a tort.
+fiscal_restitution,2,plein_contentieux,La societe conteste des rappels de TVA et sollicite une decharge fiscale.
+fiscal_restitution,3,plein_contentieux,Le requerant veut obtenir l annulation d un redressement fiscal et le remboursement des sommes versees.
+fiscal_restitution,4,plein_contentieux,Le litige porte sur des impots et sur une demande de decharge devant le juge administratif.
+pension_revision,1,autres_recours,Un ancien agent public demande la revision de sa pension administrative.
+pension_revision,2,autres_recours,Le recours concerne le calcul d une pension servie par l administration.
+pension_revision,3,autres_recours,Le requerant conteste le montant de sa pension dans un contentieux administratif specialise.
+pension_revision,4,autres_recours,Le dossier porte sur une pension et sur les droits ouverts a un ancien fonctionnaire.

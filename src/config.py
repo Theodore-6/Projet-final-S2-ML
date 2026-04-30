@@ -26,6 +26,7 @@ for dir in [
 ENV_FILE = PROJECT_ROOT / ".env"
 APP_ENTRYPOINT = PROJECT_ROOT / "src" / "app.py"
 MODEL_METRICS_FILE = RESULTS_DIR / "model_metrics.csv"
+ROBUSTNESS_METRICS_FILE = RESULTS_DIR / "robustness_metrics.csv"
 PROCESSED_DATA_FILE = DATA_DIR / "processed_legal_cases_admin.csv"
 
 STREAMLIT_HOST = "localhost"
@@ -52,5 +53,15 @@ MODELS = {
         "name": "TF-IDF + Linear SVM",
         "description": "Margin-based baseline for short legal fact summaries.",
         "path": MODELS_DIR / "linear_svm_legal.joblib",
+    },
+    "char_svm_legal": {
+        "name": "Character TF-IDF + Linear SVM",
+        "description": "More formulation-robust linear model based on character n-grams.",
+        "path": MODELS_DIR / "char_svm_legal.joblib",
+    },
+    "lsa_log_reg_legal": {
+        "name": "Latent Semantic TF-IDF + Logistic Regression",
+        "description": "Dense semantic projection over TF-IDF features for improved robustness.",
+        "path": MODELS_DIR / "lsa_log_reg_legal.joblib",
     },
 }

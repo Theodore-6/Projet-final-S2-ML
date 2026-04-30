@@ -1,11 +1,11 @@
-"""Streamlit entry point for the legal case triage demo."""
+"""Premium Streamlit dashboard for the legal case triage demo."""
 
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -17,6 +17,7 @@ from config import (
     PROCESSED_DATA_FILE,
     PROJECT_SUBTITLE,
     PROJECT_TITLE,
+    ROBUSTNESS_METRICS_FILE,
     TARGET_COLUMN,
     TEXT_COLUMN,
 )
@@ -40,17 +41,30 @@ OUTCOME_LABELS = {
 }
 
 OUTCOME_USER_MEANINGS = {
-    "defavorable_requerant": "Si vous etes le requerant : vous perdez ou vous n'obtenez pas ce que vous demandiez.",
+    "defavorable_requerant": (
+        "Si vous etes le requerant : vous perdez ou vous n'obtenez pas ce que "
+        "vous demandiez."
+    ),
     "favorable_requerant": "Si vous etes le requerant : vous gagnez.",
-    "partiellement_favorable": "Si vous etes le requerant : vous gagnez seulement en partie.",
+    "partiellement_favorable": (
+        "Si vous etes le requerant : vous gagnez seulement en partie."
+    ),
     "desistement": "Si vous etes le requerant : vous retirez votre requete.",
-    "renvoi": "L'affaire est renvoyee devant une autre juridiction ou formation ; ce n'est pas une victoire nette immediate.",
+    "renvoi": (
+        "L'affaire est renvoyee devant une autre juridiction ou formation ; ce "
+        "n'est pas une victoire nette immediate."
+    ),
     "non_lieu": "Le juge estime qu'il n'y a plus lieu de statuer au fond.",
-    "autre_issue": "Issue procedurale diverse qui ne se lit pas comme une victoire ou une defaite simple.",
+    "autre_issue": (
+        "Issue procedurale diverse qui ne se lit pas comme une victoire ou une "
+        "defaite simple."
+    ),
 }
 
 OUTCOME_WINNER_LABELS = {
-    "defavorable_requerant": "La partie defenderesse gagne le plus souvent (souvent l'administration)",
+    "defavorable_requerant": (
+        "La partie defenderesse gagne le plus souvent (souvent l'administration)"
+    ),
     "favorable_requerant": "Le requerant gagne le plus souvent",
     "partiellement_favorable": "Le requerant gagne en partie",
     "desistement": "Pas de gagnant clair : le requerant retire sa requete",
@@ -59,24 +73,18 @@ OUTCOME_WINNER_LABELS = {
     "autre_issue": "Pas de gagnant clair",
 }
 
-METRIC_LABELS = {
-    "accuracy": "Accuracy",
-    "f1_macro": "F1 macro",
-    "precision_macro": "Precision macro",
-    "recall_macro": "Recall macro",
-}
-
 SPECIALIST_GUIDANCE = {
     "plein_contentieux": {
         "specialist": "Avocat en plein contentieux administratif",
         "orientation": (
             "A orienter vers un specialiste des litiges ou l'on demande une "
             "condamnation, une indemnisation, un paiement, une responsabilite "
-            "de la puissance publique ou un contentieux fiscal / contractuel."
+            "de la puissance publique ou un contentieux fiscal ou contractuel."
         ),
         "examples": (
             "Exemples frequents : responsabilite hospitaliere, indemnisation, "
-            "marches publics, fiscalite, sanctions administratives avec enjeu financier."
+            "marches publics, fiscalite, sanctions administratives avec enjeu "
+            "financier."
         ),
     },
     "exces_de_pouvoir": {
@@ -180,7 +188,372 @@ DOMAIN_SPECIALISTS = {
     "famille": "Avocat en droit de la famille",
 }
 
+DOMAIN_LABELS = {
+    "administratif": "Droit administratif",
+    "travail": "Droit du travail",
+    "penal": "Droit penal",
+    "famille": "Droit de la famille",
+}
+
 REFERENCE_METADATA_FILE = DATA_DIR / "processed_conseil_etat_june_2022.csv"
+
+
+def _inject_css() -> None:
+    """Push Streamlit toward a premium, glass-heavy, Apple-like interface."""
+    st.markdown(
+        """
+        <style>
+            :root {
+                --surface: rgba(255, 255, 255, 0.72);
+                --surface-strong: rgba(255, 255, 255, 0.84);
+                --surface-soft: rgba(248, 248, 250, 0.64);
+                --line: rgba(15, 23, 42, 0.08);
+                --line-strong: rgba(15, 23, 42, 0.12);
+                --text: #0f172a;
+                --muted: #667085;
+                --shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+                --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.05);
+                --radius-xl: 24px;
+                --radius-lg: 20px;
+                --radius-md: 16px;
+            }
+
+            .stApp {
+                background:
+                    radial-gradient(circle at top left, rgba(214, 224, 255, 0.55), transparent 35%),
+                    radial-gradient(circle at top right, rgba(245, 247, 250, 0.8), transparent 30%),
+                    linear-gradient(180deg, #f7f8fa 0%, #eef1f5 100%);
+                color: var(--text);
+            }
+
+            [data-testid="stAppViewContainer"] > .main {
+                background: transparent;
+            }
+
+            .main .block-container {
+                max-width: 1120px;
+                padding-top: 2.5rem;
+                padding-bottom: 4rem;
+                padding-left: 1.4rem;
+                padding-right: 1.4rem;
+            }
+
+            [data-testid="stSidebar"] {
+                background: rgba(250, 250, 252, 0.74);
+                border-right: 1px solid rgba(255, 255, 255, 0.55);
+                backdrop-filter: blur(18px);
+            }
+
+            [data-testid="stSidebar"] > div:first-child {
+                background: transparent;
+            }
+
+            [data-testid="stSidebar"] .block-container {
+                padding-top: 2rem;
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+
+            header[data-testid="stHeader"] {
+                background: transparent;
+            }
+
+            [data-testid="stToolbar"] {
+                right: 1rem;
+            }
+
+            div.stButton > button {
+                width: 100%;
+                min-height: 52px;
+                border-radius: 999px;
+                border: 1px solid rgba(255, 255, 255, 0.72);
+                background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(17, 24, 39, 0.82));
+                color: #ffffff;
+                font-weight: 600;
+                letter-spacing: -0.01em;
+                box-shadow: 0 14px 32px rgba(17, 24, 39, 0.16);
+                transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+            }
+
+            div.stButton > button:hover {
+                transform: translateY(-1px) scale(1.01);
+                box-shadow: 0 18px 36px rgba(17, 24, 39, 0.2);
+                filter: brightness(1.02);
+            }
+
+            div.stButton > button:focus:not(:active) {
+                border: 1px solid rgba(15, 23, 42, 0.12);
+                box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+            }
+
+            div[data-baseweb="textarea"] textarea {
+                border-radius: var(--radius-lg);
+                background: rgba(255, 255, 255, 0.76);
+                border: 1px solid rgba(255, 255, 255, 0.58);
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+                backdrop-filter: blur(14px);
+                font-size: 1rem;
+                line-height: 1.6;
+                padding: 1rem 1.1rem;
+            }
+
+            div[data-baseweb="select"] > div,
+            div[data-baseweb="base-input"] > div {
+                border-radius: 16px;
+            }
+
+            [data-testid="stDataFrame"],
+            [data-testid="stMetric"],
+            [data-testid="stAlert"] {
+                border-radius: var(--radius-lg);
+            }
+
+            [data-testid="stDataFrame"] {
+                border: 1px solid rgba(255, 255, 255, 0.45);
+                box-shadow: var(--shadow-soft);
+                overflow: hidden;
+            }
+
+            [data-testid="stPlotlyChart"] {
+                border-radius: var(--radius-lg);
+                overflow: hidden;
+            }
+
+            [data-testid="stRadio"] label {
+                font-size: 0.95rem;
+            }
+
+            .hero-shell {
+                padding: 1.2rem 0 1.8rem 0;
+            }
+
+            .eyebrow {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.4rem 0.78rem;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.55);
+                border: 1px solid rgba(255, 255, 255, 0.72);
+                color: #475467;
+                font-size: 0.8rem;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+                backdrop-filter: blur(16px);
+            }
+
+            .hero-title {
+                margin: 1rem 0 0.55rem 0;
+                font-size: clamp(2.3rem, 5vw, 4.5rem);
+                line-height: 0.98;
+                letter-spacing: -0.045em;
+                font-weight: 700;
+                color: var(--text);
+            }
+
+            .hero-subtitle {
+                max-width: 760px;
+                margin: 0;
+                color: var(--muted);
+                font-size: 1.02rem;
+                line-height: 1.7;
+                letter-spacing: -0.01em;
+            }
+
+            .glass-card {
+                background: var(--surface);
+                border: 1px solid rgba(255, 255, 255, 0.52);
+                border-radius: var(--radius-xl);
+                box-shadow: var(--shadow);
+                backdrop-filter: blur(18px);
+                -webkit-backdrop-filter: blur(18px);
+                padding: 1.35rem;
+                transition: transform 180ms ease, box-shadow 180ms ease;
+            }
+
+            .glass-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 24px 72px rgba(15, 23, 42, 0.1);
+            }
+
+            .kpi-card {
+                min-height: 162px;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+
+            .kpi-label {
+                color: var(--muted);
+                font-size: 0.88rem;
+                letter-spacing: -0.01em;
+            }
+
+            .kpi-value {
+                margin-top: 0.75rem;
+                font-size: clamp(1.9rem, 3vw, 2.7rem);
+                line-height: 1;
+                letter-spacing: -0.04em;
+                font-weight: 700;
+                color: var(--text);
+            }
+
+            .kpi-hint {
+                color: #475467;
+                font-size: 0.92rem;
+                line-height: 1.5;
+            }
+
+            .section-heading {
+                margin: 0;
+                font-size: 1.45rem;
+                line-height: 1.15;
+                letter-spacing: -0.03em;
+                font-weight: 650;
+                color: var(--text);
+            }
+
+            .section-subtitle {
+                margin: 0.35rem 0 0 0;
+                color: var(--muted);
+                font-size: 0.96rem;
+                line-height: 1.6;
+            }
+
+            .micro-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.38rem 0.7rem;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.48);
+                border: 1px solid rgba(255, 255, 255, 0.64);
+                color: #344054;
+                font-size: 0.84rem;
+                font-weight: 500;
+            }
+
+            .signal-card {
+                padding: 1rem 1.05rem;
+                background: rgba(255, 255, 255, 0.44);
+                border: 1px solid rgba(255, 255, 255, 0.52);
+                border-radius: 18px;
+                min-height: 140px;
+            }
+
+            .signal-label {
+                color: var(--muted);
+                font-size: 0.84rem;
+                letter-spacing: -0.01em;
+            }
+
+            .signal-value {
+                margin-top: 0.7rem;
+                font-size: 1.08rem;
+                line-height: 1.35;
+                letter-spacing: -0.02em;
+                font-weight: 600;
+                color: var(--text);
+            }
+
+            .signal-caption {
+                margin-top: 0.6rem;
+                color: #475467;
+                font-size: 0.9rem;
+                line-height: 1.5;
+            }
+
+            .callout {
+                padding: 1rem 1.05rem;
+                border-radius: 18px;
+                border: 1px solid rgba(255, 255, 255, 0.58);
+                backdrop-filter: blur(12px);
+                background: rgba(255, 255, 255, 0.58);
+            }
+
+            .callout-strong {
+                background: rgba(255, 252, 235, 0.74);
+                border-color: rgba(245, 158, 11, 0.18);
+            }
+
+            .callout-danger {
+                background: rgba(255, 245, 245, 0.82);
+                border-color: rgba(239, 68, 68, 0.18);
+            }
+
+            .callout-ok {
+                background: rgba(239, 250, 244, 0.82);
+                border-color: rgba(16, 185, 129, 0.18);
+            }
+
+            .callout-title {
+                margin: 0;
+                font-size: 0.95rem;
+                font-weight: 650;
+                color: var(--text);
+            }
+
+            .callout-copy {
+                margin: 0.45rem 0 0 0;
+                color: #475467;
+                font-size: 0.92rem;
+                line-height: 1.55;
+            }
+
+            .footer-note {
+                color: var(--muted);
+                font-size: 0.9rem;
+                line-height: 1.6;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _glass_open(extra_class: str = "") -> None:
+    st.markdown(
+        f'<div class="glass-card {extra_class}">'.strip(),
+        unsafe_allow_html=True,
+    )
+
+
+def _glass_close() -> None:
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _metric_card(label: str, value: str, hint: str) -> str:
+    return f"""
+    <div class="glass-card kpi-card">
+        <div>
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-value">{value}</div>
+        </div>
+        <div class="kpi-hint">{hint}</div>
+    </div>
+    """
+
+
+def _signal_card(label: str, value: str, caption: str) -> str:
+    return f"""
+    <div class="signal-card">
+        <div class="signal-label">{label}</div>
+        <div class="signal-value">{value}</div>
+        <div class="signal-caption">{caption}</div>
+    </div>
+    """
+
+
+def _section_header(title: str, subtitle: str) -> None:
+    st.markdown(
+        f"""
+        <div style="margin-bottom: 1rem;">
+            <h2 class="section-heading">{title}</h2>
+            <p class="section-subtitle">{subtitle}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _humanize_category(value: str) -> str:
@@ -257,15 +630,19 @@ def _specialist_guidance(predicted_category: str) -> dict[str, str]:
 def _load_dataset() -> Optional[pd.DataFrame]:
     if not PROCESSED_DATA_FILE.exists():
         return None
-
     return pd.read_csv(PROCESSED_DATA_FILE)
 
 
 def _load_metrics() -> Optional[pd.DataFrame]:
     if not MODEL_METRICS_FILE.exists():
         return None
-
     return pd.read_csv(MODEL_METRICS_FILE)
+
+
+def _load_robustness_metrics() -> Optional[pd.DataFrame]:
+    if not ROBUSTNESS_METRICS_FILE.exists():
+        return None
+    return pd.read_csv(ROBUSTNESS_METRICS_FILE)
 
 
 def _load_reference_metadata() -> Optional[pd.DataFrame]:
@@ -285,16 +662,79 @@ def _load_reference_metadata() -> Optional[pd.DataFrame]:
 
 
 def _load_demo_model():
-    for model_key in ("log_reg_legal", "linear_svm_legal"):
+    metrics_df = _load_metrics()
+    if metrics_df is not None and not metrics_df.empty and "f1_macro" in metrics_df.columns:
+        ranked = metrics_df.sort_values("f1_macro", ascending=False)
+        for _, row in ranked.iterrows():
+            model_key = row.get("model_key")
+            model_config = MODELS.get(model_key)
+            if model_config and model_config["path"].exists():
+                return model_config, load_model(model_config["path"])
+
+    for model_key in (
+        "char_svm_legal",
+        "lsa_log_reg_legal",
+        "linear_svm_legal",
+        "log_reg_legal",
+    ):
         model_config = MODELS.get(model_key)
         if model_config and model_config["path"].exists():
             return model_config, load_model(model_config["path"])
 
-    for model_config in MODELS.values():
-        if model_config["path"].exists():
-            return model_config, load_model(model_config["path"])
-
     return None, None
+
+
+def _available_model_options() -> list[dict[str, object]]:
+    options = []
+    metrics_df = _load_metrics()
+    robustness_df = _load_robustness_metrics()
+    metric_lookup = {}
+    robustness_lookup = {}
+    if metrics_df is not None and not metrics_df.empty:
+        metric_lookup = metrics_df.set_index("model_key").to_dict(orient="index")
+    if robustness_df is not None and not robustness_df.empty:
+        robustness_lookup = robustness_df.set_index("model_key").to_dict(orient="index")
+
+    for model_key, model_config in MODELS.items():
+        if not model_config["path"].exists():
+            continue
+        option = {
+            "model_key": model_key,
+            "label": model_config["name"],
+            "config": model_config,
+            "f1_macro": metric_lookup.get(model_key, {}).get("f1_macro"),
+            "robustness": robustness_lookup.get(model_key, {}).get("accuracy_expected_category"),
+        }
+        options.append(option)
+
+    options.sort(
+        key=lambda item: item["f1_macro"] if item["f1_macro"] is not None else -1,
+        reverse=True,
+    )
+    return options
+
+
+def _best_model_summary(metrics_df: Optional[pd.DataFrame]) -> tuple[str, str]:
+    if metrics_df is None or metrics_df.empty:
+        return "Aucun modele", "0%"
+
+    ranked = metrics_df.sort_values("f1_macro", ascending=False).iloc[0]
+    return str(ranked["model_name"]), f"{ranked['f1_macro'] * 100:.1f}%"
+
+
+def _best_robust_model_summary(
+    robustness_df: Optional[pd.DataFrame],
+) -> tuple[str, str]:
+    if robustness_df is None or robustness_df.empty:
+        return "Aucun modele", "0%"
+
+    ranked = robustness_df.sort_values(
+        "accuracy_expected_category", ascending=False
+    ).iloc[0]
+    return (
+        str(ranked["model_name"]),
+        f"{ranked['accuracy_expected_category'] * 100:.1f}%",
+    )
 
 
 def _format_metrics(metrics_df: pd.DataFrame) -> pd.DataFrame:
@@ -316,6 +756,116 @@ def _format_metrics(metrics_df: pd.DataFrame) -> pd.DataFrame:
     return display_df[keep_columns].rename(columns=rename_map)
 
 
+def _build_metrics_chart(metrics_df: Optional[pd.DataFrame]) -> go.Figure:
+    figure = go.Figure()
+
+    if metrics_df is None or metrics_df.empty:
+        figure.update_layout(
+            height=320,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    chart_df = metrics_df.copy()
+    chart_df["f1_macro"] = chart_df["f1_macro"] * 100
+    chart_df = chart_df.sort_values("f1_macro", ascending=True)
+
+    figure.add_trace(
+        go.Bar(
+            x=chart_df["f1_macro"],
+            y=chart_df["model_name"],
+            orientation="h",
+            marker=dict(
+                color=["rgba(15, 23, 42, 0.82)", "rgba(107, 114, 128, 0.58)"][: len(chart_df)],
+                line=dict(color="rgba(255,255,255,0.85)", width=1.2),
+            ),
+            hovertemplate="%{y}<br>F1 macro: %{x:.1f}%<extra></extra>",
+        )
+    )
+
+    figure.update_layout(
+        height=320,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        bargap=0.38,
+        xaxis=dict(
+            title="",
+            showgrid=True,
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            zeroline=False,
+            ticksuffix="%",
+            color="#667085",
+        ),
+        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
+def _build_category_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
+    figure = go.Figure()
+
+    if dataset_df is None or dataset_df.empty:
+        figure.update_layout(
+            height=320,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    chart_df = (
+        dataset_df[TARGET_COLUMN]
+        .value_counts()
+        .rename_axis("category")
+        .reset_index(name="count")
+    )
+    chart_df["label"] = chart_df["category"].map(_humanize_category)
+    chart_df = chart_df.sort_values("count", ascending=True)
+
+    colors = ["rgba(15, 23, 42, 0.90)", "rgba(99, 102, 241, 0.48)", "rgba(203, 213, 225, 0.95)"]
+
+    figure.add_trace(
+        go.Bar(
+            x=chart_df["count"],
+            y=chart_df["label"],
+            orientation="h",
+            marker=dict(
+                color=colors[: len(chart_df)],
+                line=dict(color="rgba(255,255,255,0.85)", width=1.2),
+            ),
+            hovertemplate="%{y}<br>%{x} decisions<extra></extra>",
+        )
+    )
+
+    figure.update_layout(
+        height=340,
+        margin=dict(l=0, r=0, t=8, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        bargap=0.34,
+        xaxis=dict(
+            title="",
+            showgrid=True,
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            zeroline=False,
+            color="#667085",
+        ),
+        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
 def _predict_case(model, facts_summary: str) -> tuple[str, Optional[pd.DataFrame]]:
     prediction = model.predict([facts_summary])[0]
 
@@ -327,7 +877,6 @@ def _predict_case(model, facts_summary: str) -> tuple[str, Optional[pd.DataFrame
     probability_df = pd.DataFrame(
         {"case_category": labels, "probability": probabilities}
     ).sort_values("probability", ascending=False)
-
     return prediction, probability_df
 
 
@@ -370,20 +919,18 @@ def _format_outcome_df(outcome_df: pd.DataFrame) -> pd.DataFrame:
     display_df = outcome_df.copy()
     display_df["outcome_label"] = display_df[OUTCOME_COLUMN].map(_humanize_outcome)
     display_df["winner_label"] = display_df[OUTCOME_COLUMN].map(OUTCOME_WINNER_LABELS)
-    display_df["user_meaning"] = display_df[OUTCOME_COLUMN].map(
-        OUTCOME_USER_MEANINGS
-    )
+    display_df["user_meaning"] = display_df[OUTCOME_COLUMN].map(OUTCOME_USER_MEANINGS)
     return display_df.rename(
         columns={
             "outcome_label": "Lecture metier",
-            "winner_label": "Qui est le plus souvent avantagé",
+            "winner_label": "Qui est le plus souvent avantage",
             "user_meaning": "Si vous etes le requerant, cela signifie",
             "share": "Part observee (%)",
         }
     )[
         [
             "Lecture metier",
-            "Qui est le plus souvent avantagé",
+            "Qui est le plus souvent avantage",
             "Si vous etes le requerant, cela signifie",
             "Part observee (%)",
         ]
@@ -414,7 +961,12 @@ def _find_similar_jurisprudence(
     similar_df = similar_df.sort_values("similarity", ascending=False).head(top_n)
 
     if reference_df is not None and "source_file" in similar_df.columns:
-        similar_df = similar_df.merge(reference_df, on="source_file", how="left", suffixes=("", "_ref"))
+        similar_df = similar_df.merge(
+            reference_df,
+            on="source_file",
+            how="left",
+            suffixes=("", "_ref"),
+        )
 
     similar_df["categorie_lisible"] = similar_df[TARGET_COLUMN].map(_humanize_category)
     similar_df["similarity"] = (similar_df["similarity"] * 100).round(1)
@@ -427,30 +979,20 @@ def _find_similar_jurisprudence(
         + "..."
     )
 
-    ecli_column = "numero_ecli" if "numero_ecli" in similar_df.columns else None
-    dossier_column = "numero_dossier" if "numero_dossier" in similar_df.columns else None
-    juridiction_column = "nom_juridiction" if "nom_juridiction" in similar_df.columns else None
-
-    if ecli_column is None:
-        similar_df["numero_ecli"] = ""
-        ecli_column = "numero_ecli"
-    if dossier_column is None:
-        similar_df["numero_dossier"] = ""
-        dossier_column = "numero_dossier"
-    if juridiction_column is None:
-        similar_df["nom_juridiction"] = ""
-        juridiction_column = "nom_juridiction"
+    for column in ("numero_ecli", "numero_dossier", "nom_juridiction"):
+        if column not in similar_df.columns:
+            similar_df[column] = ""
 
     return similar_df.rename(
         columns={
+            "numero_ecli": "ECLI",
+            "numero_dossier": "Numero dossier",
             "date_lecture": "Date",
+            "nom_juridiction": "Juridiction",
             "categorie_lisible": "Categorie",
             "solution": "Issue observee",
             "similarity": "Proximite textuelle (%)",
             "resume_court": "Extrait de faits proches",
-            ecli_column: "ECLI",
-            dossier_column: "Numero dossier",
-            juridiction_column: "Juridiction",
         }
     )[
         [
@@ -472,14 +1014,23 @@ def _top_linear_evidence(
     pipeline_steps = getattr(model, "named_steps", {})
     vectorizer = pipeline_steps.get("tfidf")
     classifier = pipeline_steps.get("classifier")
+    latent_step = pipeline_steps.get("lsa")
 
     if vectorizer is None or classifier is None:
         return None
 
-    if not hasattr(vectorizer, "transform") or not hasattr(vectorizer, "get_feature_names_out"):
+    if not hasattr(vectorizer, "transform") or not hasattr(
+        vectorizer, "get_feature_names_out"
+    ):
         return None
 
     if not hasattr(classifier, "coef_") or not hasattr(classifier, "classes_"):
+        return None
+
+    # For latent semantic pipelines, classifier coefficients live in the
+    # reduced latent space rather than directly in the TF-IDF feature space.
+    # A token-level contribution table would be misleading here, so we skip it.
+    if latent_step is not None:
         return None
 
     class_labels = list(classifier.classes_)
@@ -510,293 +1061,657 @@ def _top_linear_evidence(
     return evidence_df.head(top_n)
 
 
+def _render_sidebar(
+    dataset_df: Optional[pd.DataFrame], metrics_df: Optional[pd.DataFrame]
+) -> tuple[str, Optional[str]]:
+    with st.sidebar:
+        robustness_df = _load_robustness_metrics()
+        st.markdown(
+            """
+            <div style="margin-bottom: 1.4rem;">
+                <div class="eyebrow">Legal ML</div>
+                <h3 style="margin: 0.85rem 0 0.35rem 0; font-size: 1.4rem; letter-spacing: -0.03em;">
+                    Control Center
+                </h3>
+                <p style="margin: 0; color: #667085; line-height: 1.55;">
+                    MVP premium pour l'orientation de dossiers administratifs.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        section = st.radio(
+            "Navigation",
+            ["Vue d'ensemble", "Case Studio", "Corpus & Jurisprudence"],
+            label_visibility="collapsed",
+        )
+
+        model_options = _available_model_options()
+        selected_model_key = None
+        if model_options:
+            option_labels = []
+            for option in model_options:
+                f1_score = option["f1_macro"]
+                robustness_score = option["robustness"]
+                if f1_score is None and robustness_score is None:
+                    option_labels.append(option["label"])
+                else:
+                    parts = [option["label"]]
+                    if f1_score is not None:
+                        parts.append(f"F1 {f1_score * 100:.1f}%")
+                    if robustness_score is not None:
+                        parts.append(f"Robustesse {robustness_score * 100:.1f}%")
+                    option_labels.append("  •  ".join(parts))
+
+            default_index = 0
+            robust_candidates = [
+                idx for idx, option in enumerate(model_options) if option["robustness"] is not None
+            ]
+            if robust_candidates:
+                default_index = max(
+                    robust_candidates,
+                    key=lambda idx: model_options[idx]["robustness"],
+                )
+
+            selected_label = st.selectbox(
+                "Modele actif",
+                option_labels,
+                index=default_index,
+            )
+            selected_model_key = model_options[option_labels.index(selected_label)]["model_key"]
+
+        st.markdown(
+            """
+            <div class="callout callout-strong" style="margin-top: 1rem;">
+                <p class="callout-title">Perimetre</p>
+                <p class="callout-copy">
+                    Cette interface est reservee au droit administratif. Les cas
+                    de travail, penal, famille ou contrats peuvent etre mal interpretes.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if dataset_df is not None:
+            st.markdown(
+                f"""
+                <div style="margin-top: 1rem;">
+                    <span class="micro-chip">{len(dataset_df)} decisions chargees</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if metrics_df is not None and not metrics_df.empty:
+            model_name, best_score = _best_model_summary(metrics_df)
+            robust_model_name, robust_score = _best_robust_model_summary(robustness_df)
+            st.markdown(
+                f"""
+                <div style="margin-top: 0.85rem;">
+                    <span class="micro-chip">Best F1: {best_score}</span>
+                </div>
+                <div style="margin-top: 0.55rem;">
+                    <span class="micro-chip">Best robustness: {robust_score}</span>
+                </div>
+                <p style="margin-top: 0.65rem; color: #475467; font-size: 0.9rem; line-height: 1.55;">
+                    Leader benchmark : {model_name}<br/>
+                    Leader reformulations : {robust_model_name}
+                </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    return section, selected_model_key
+
+
+def _render_hero() -> None:
+    st.markdown(
+        f"""
+        <div class="hero-shell">
+            <div class="eyebrow">Administrative Law Triage</div>
+            <h1 class="hero-title">{PROJECT_TITLE}</h1>
+            <p class="hero-subtitle">
+                {PROJECT_SUBTITLE}. Une interface premium pour lire le perimetre
+                du dossier, estimer sa famille de contentieux et rapprocher des
+                jurisprudences administratives voisines.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_kpis(
+    dataset_df: Optional[pd.DataFrame],
+    metrics_df: Optional[pd.DataFrame],
+    robustness_df: Optional[pd.DataFrame],
+    model_config,
+) -> None:
+    model_name, best_score = _best_model_summary(metrics_df)
+    robust_name, robust_score = _best_robust_model_summary(robustness_df)
+    categories_count = dataset_df[TARGET_COLUMN].nunique() if dataset_df is not None else 0
+    cases_count = len(dataset_df) if dataset_df is not None else 0
+    active_model = model_config["name"] if model_config is not None else "Aucun"
+
+    col1, col2, col3, col4 = st.columns(4, gap="medium")
+    with col1:
+        st.markdown(
+            _metric_card(
+                "Corpus actif",
+                f"{cases_count}",
+                "Decisions administratives nettoyees et exploitables.",
+            ),
+            unsafe_allow_html=True,
+        )
+    with col2:
+        st.markdown(
+            _metric_card(
+                "Familles de recours",
+                f"{categories_count}",
+                "Le MVP reste volontairement compact pour garder un signal stable.",
+            ),
+            unsafe_allow_html=True,
+        )
+    with col3:
+        st.markdown(
+            _metric_card(
+                "Meilleur F1 macro",
+                best_score,
+                f"Modele leader actuel : {model_name}.",
+            ),
+            unsafe_allow_html=True,
+        )
+    with col4:
+        st.markdown(
+            _metric_card(
+                "Robustesse paraphrases",
+                robust_score,
+                f"Leader reformulations : {robust_name}. Modele actif : {active_model}.",
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def _render_overview(
+    dataset_df: Optional[pd.DataFrame], metrics_df: Optional[pd.DataFrame]
+) -> None:
+    left, right = st.columns((1.15, 1), gap="large")
+
+    with left:
+        _glass_open()
+        _section_header(
+            "Distribution du corpus",
+            "Les trois familles de recours du MVP servent de colonne vertebrale a l'orientation.",
+        )
+        st.plotly_chart(
+            _build_category_chart(dataset_df),
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
+        _glass_close()
+
+    with right:
+        _glass_open()
+        _section_header(
+            "Performance modele",
+            "Lecture rapide du niveau de fiabilite actuel pour comparer les baselines.",
+        )
+        st.plotly_chart(
+            _build_metrics_chart(metrics_df),
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
+        _glass_close()
+
+    st.markdown("<div style='height: 1.15rem;'></div>", unsafe_allow_html=True)
+
+    col1, col2 = st.columns((1, 1), gap="large")
+    with col1:
+        _glass_open()
+        _section_header(
+            "Ce que fait vraiment le produit",
+            "Positionnement volontairement simple, assume et defendable en soutenance.",
+        )
+        st.markdown(
+            """
+            <div class="footer-note">
+                <p>
+                    L'app ne remplace pas l'analyse d'un avocat. Elle sert a pre-qualifier
+                    un dossier administratif, a verifier s'il reste dans le bon perimetre
+                    juridique et a recuperer des references de jurisprudence proches du corpus.
+                </p>
+                <p>
+                    L'approche actuelle repose sur un modele lexical. Elle est utile pour un
+                    MVP de triage, mais pas pour trancher seule un dossier complexe.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _glass_close()
+
+    with col2:
+        _glass_open()
+        _section_header(
+            "Source officielle",
+            "Le corpus provient de l'open data de la justice administrative.",
+        )
+        st.markdown(
+            """
+            <div class="footer-note">
+                <p><strong>Source principale :</strong> opendata.justice-administrative.fr</p>
+                <p>
+                    Le MVP tourne aujourd'hui sur un lot Conseil d'Etat, mais la
+                    structure retenue est compatible avec des extensions futures vers
+                    les CAA et les tribunaux administratifs.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _glass_close()
+
+
+def _render_case_studio(
+    dataset_df: Optional[pd.DataFrame],
+    reference_df: Optional[pd.DataFrame],
+    model_config,
+    model,
+) -> None:
+    _glass_open()
+    _section_header(
+        "Case Studio",
+        "Analyse un dossier, teste le perimetre juridique et rapproche des jurisprudences proches.",
+    )
+    st.markdown(
+        """
+        <div class="callout callout-danger" style="margin-bottom: 1rem;">
+            <p class="callout-title">Droit administratif uniquement</p>
+            <p class="callout-copy">
+                Saisis de preference un cas de titre de sejour, decision de prefecture,
+                permis, refus d'autorisation, contentieux fiscal, marche public ou acte
+                administratif contestable.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form("case_studio_form", clear_on_submit=False):
+        facts_summary = st.text_area(
+            "Resume des faits",
+            placeholder=(
+                "Exemple : Une personne conteste un refus de titre de sejour "
+                "oppose par la prefecture apres plusieurs demandes."
+            ),
+            height=170,
+        )
+        submitted = st.form_submit_button("Analyser le dossier")
+
+    if not submitted:
+        st.markdown(
+            """
+            <div class="footer-note" style="margin-top: 0.4rem;">
+                Lance une analyse pour obtenir un cadrage de domaine, une orientation
+                vers le bon specialiste et un rapprochement avec des decisions du corpus.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _glass_close()
+        return
+
+    if not facts_summary.strip():
+        st.warning("Saisis d'abord un resume de faits.")
+        _glass_close()
+        return
+
+    if dataset_df is None or model is None or model_config is None:
+        st.error(
+            "Le dataset ou le modele manque. Recharge le projet puis relance les modeles."
+        )
+        _glass_close()
+        return
+
+    predicted_category, probability_df = _predict_case(model, facts_summary)
+    domain_signal = _detect_legal_domain(facts_summary)
+    specialist_guidance = _specialist_guidance(predicted_category)
+    top_domain = str(domain_signal["top_domain"])
+    is_confident = bool(domain_signal["is_confident"])
+    matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6]) or "aucun terme fort"
+
+    if probability_df is not None:
+        top_probability = float(probability_df.iloc[0]["probability"])
+        confidence_display = f"{top_probability * 100:.1f}%"
+    else:
+        top_probability = 0.0
+        confidence_display = "n/a"
+
+    if is_confident and top_domain != "administratif":
+        specialist_title = DOMAIN_SPECIALISTS[top_domain]
+        specialist_copy = (
+            "Le texte ressemble davantage a un dossier hors perimetre administratif. "
+            "Cette orientation doit primer sur la prediction du classifieur administratif."
+        )
+    else:
+        specialist_title = specialist_guidance["specialist"]
+        specialist_copy = specialist_guidance["orientation"]
+
+    scope_value = DOMAIN_LABELS.get(top_domain, top_domain.title())
+    scope_copy = (
+        f"Indices reperes : {matched_terms}."
+        if matched_terms
+        else "Peu d'indices de domaine clairement distinctifs."
+    )
+
+    kpi_cols = st.columns(4, gap="medium")
+    with kpi_cols[0]:
+        st.markdown(
+            _signal_card(
+                "Categorie predite",
+                _humanize_category(predicted_category),
+                f"Code interne : {predicted_category}",
+            ),
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[1]:
+        st.markdown(
+            _signal_card(
+                "Perimetre detecte",
+                scope_value,
+                scope_copy,
+            ),
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[2]:
+        st.markdown(
+            _signal_card(
+                "Confiance",
+                confidence_display,
+                "Mesure issue des probabilites du modele lorsqu'elles sont disponibles.",
+            ),
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[3]:
+        st.markdown(
+            _signal_card(
+                "Specialiste conseille",
+                specialist_title,
+                specialist_copy,
+            ),
+            unsafe_allow_html=True,
+        )
+
+    if is_confident and top_domain != "administratif":
+        st.markdown(
+            """
+            <div class="callout callout-danger" style="margin-top: 1rem;">
+                <p class="callout-title">Hors perimetre probable</p>
+                <p class="callout-copy">
+                    Le texte semble davantage relever d'une autre branche du droit que
+                    du contentieux administratif. Le modele actuel ne doit pas etre lu
+                    comme une orientation finale fiable dans ce cas.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif top_probability < 0.55:
+        st.markdown(
+            """
+            <div class="callout callout-strong" style="margin-top: 1rem;">
+                <p class="callout-title">Confiance moderee</p>
+                <p class="callout-copy">
+                    Le modele hesite encore. Utilise la sortie comme un signal de triage,
+                    pas comme une conclusion juridique.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <div class="callout callout-ok" style="margin-top: 1rem;">
+                <p class="callout-title">Signal compatible avec le corpus</p>
+                <p class="callout-copy">
+                    Les indices textuels semblent rester dans le perimetre du MVP.
+                    L'analyse ci-dessous peut donc etre lue comme une aide de triage plus cohérente.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    analysis_left, analysis_right = st.columns((1, 1), gap="large")
+
+    with analysis_left:
+        _glass_open()
+        _section_header(
+            "Lecture du modele",
+            "Probabilites et indices lexicaux qui ont influence la sortie actuelle.",
+        )
+        if probability_df is not None:
+            st.dataframe(
+                _format_probability_df(probability_df.head(3)),
+                width="stretch",
+                hide_index=True,
+            )
+
+        st.markdown(
+            """
+            <div class="callout callout-strong" style="margin-top: 1rem; margin-bottom: 1rem;">
+                <p class="callout-title">Transparence sur la limite du modele</p>
+                <p class="callout-copy">
+                    Le classifieur actuel reste lexical. Il repere des mots et groupes de mots,
+                    pas une comprehension semantique profonde. Une reformulation peut donc faire
+                    varier la sortie.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        evidence_df = _top_linear_evidence(model, facts_summary, predicted_category)
+        if evidence_df is not None:
+            st.dataframe(evidence_df, width="stretch", hide_index=True)
+        else:
+            st.info("Aucune evidence lexicale exploitable n'a pu etre extraite.")
+        _glass_close()
+
+    with analysis_right:
+        _glass_open()
+        _section_header(
+            "Lecture contentieuse",
+            "Qui semble avantagé dans les cas proches et comment lire l'issue.",
+        )
+        outcome_df = _empirical_outcomes(dataset_df, predicted_category)
+        if outcome_df is not None:
+            st.markdown(
+                """
+                <div class="footer-note" style="margin-bottom: 0.9rem;">
+                    Dans cette lecture, le requerant est la personne ou l'entite qui
+                    saisit le juge administratif. Une issue defavorable au requerant
+                    signifie donc que le requerant perd et que la partie defenderesse
+                    est avantagée.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.dataframe(
+                _format_outcome_df(outcome_df),
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            st.info("Pas d'estimation empirique disponible pour cette categorie.")
+        _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    _glass_open()
+    _section_header(
+        "Jurisprudences proches",
+        "Decisions du corpus dont le resume de faits est le plus proche textuellement de votre saisie.",
+    )
+    if is_confident and top_domain != "administratif":
+        st.warning(
+            "Le texte semble hors perimetre administratif. Je n'utilise donc pas la "
+            "jurisprudence administrative du corpus comme reference principale."
+        )
+    else:
+        similar_cases_df = _find_similar_jurisprudence(
+            model,
+            dataset_df,
+            reference_df,
+            facts_summary,
+        )
+        if similar_cases_df is not None:
+            st.dataframe(similar_cases_df, width="stretch", hide_index=True)
+        else:
+            st.info("Impossible de calculer un rapprochement fiable avec le corpus.")
+    _glass_close()
+    _glass_close()
+
+
+def _render_corpus(
+    dataset_df: Optional[pd.DataFrame],
+    metrics_df: Optional[pd.DataFrame],
+    robustness_df: Optional[pd.DataFrame],
+) -> None:
+    left, right = st.columns((1.1, 0.9), gap="large")
+
+    with left:
+        _glass_open()
+        _section_header(
+            "Apercu du dataset",
+            "Vue rapide sur les donnees qui alimentent le moteur de triage.",
+        )
+        if dataset_df is not None and not dataset_df.empty:
+            preview_df = dataset_df.head(8).copy()
+            preview_df[TARGET_COLUMN] = preview_df[TARGET_COLUMN].map(_humanize_category)
+            st.dataframe(preview_df, width="stretch", hide_index=True)
+        else:
+            st.info("Dataset indisponible.")
+        _glass_close()
+
+    with right:
+        _glass_open()
+        _section_header(
+            "Metriques",
+            "Reference compacte pour relire le niveau du modele pendant la demo.",
+        )
+        if metrics_df is not None and not metrics_df.empty:
+            st.dataframe(_format_metrics(metrics_df), width="stretch", hide_index=True)
+        else:
+            st.info("Aucune metrique disponible.")
+        if robustness_df is not None and not robustness_df.empty:
+            robustness_display = robustness_df.copy()
+            robustness_display["accuracy_expected_category"] = (
+                robustness_display["accuracy_expected_category"] * 100
+            ).round(1)
+            robustness_display["paraphrase_consistency"] = (
+                robustness_display["paraphrase_consistency"] * 100
+            ).round(1)
+            if "mean_top_probability" in robustness_display.columns:
+                robustness_display["mean_top_probability"] = (
+                    pd.to_numeric(
+                        robustness_display["mean_top_probability"], errors="coerce"
+                    )
+                    * 100
+                ).round(1)
+            st.markdown("<div style='height: 0.9rem;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class="footer-note" style="margin-bottom: 0.65rem;">
+                    Lecture supplementaire : tenue du modele sur un mini-benchmark de reformulations.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.dataframe(
+                robustness_display.rename(
+                    columns={
+                        "model_name": "Modele",
+                        "accuracy_expected_category": "Exactitude benchmark (%)",
+                        "paraphrase_consistency": "Stabilite reformulations (%)",
+                        "mean_top_probability": "Confiance moyenne (%)",
+                    }
+                )[
+                    [
+                        "Modele",
+                        "Exactitude benchmark (%)",
+                        "Stabilite reformulations (%)",
+                        "Confiance moyenne (%)",
+                    ]
+                ],
+                width="stretch",
+                hide_index=True,
+            )
+        _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+
+    _glass_open()
+    _section_header(
+        "Pourquoi seulement 3 categories ?",
+        "Choix methodologique volontaire pour un MVP stable, lisible et defendable.",
+    )
+    st.markdown(
+        """
+        <div class="footer-note">
+            <p>
+                Le corpus actuel vient surtout d'un lot Conseil d'Etat en droit administratif.
+                Les labels du MVP derivent donc de trois grandes familles procedurales :
+                recours pour exces de pouvoir, plein contentieux et autres recours administratifs.
+            </p>
+            <p>
+                Ce n'est pas une cartographie complete de tous les specialistes du droit francais.
+                C'est une premiere couche de triage administatif, volontairement restreinte pour
+                conserver un produit plus honnete, plus lisible et plus fiable.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _glass_close()
+
+
 def build_app() -> None:
-    st.set_page_config(page_title=PROJECT_TITLE, layout="wide")
+    st.set_page_config(
+        page_title=PROJECT_TITLE,
+        page_icon=".",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    _inject_css()
 
     dataset_df = _load_dataset()
     reference_df = _load_reference_metadata()
     metrics_df = _load_metrics()
+    robustness_df = _load_robustness_metrics()
     model_config, model = _load_demo_model()
 
-    st.title(PROJECT_TITLE)
-    st.caption(PROJECT_SUBTITLE)
+    section, selected_model_key = _render_sidebar(dataset_df, metrics_df)
+    if selected_model_key is not None:
+        selected_config = MODELS.get(selected_model_key)
+        if selected_config and selected_config["path"].exists():
+            model_config = selected_config
+            model = load_model(selected_config["path"])
 
-    st.markdown(
-        """
-        Cet outil aide a qualifier un dossier juridique a partir d'un resume de
-        faits. Le MVP actuel est centre sur des decisions du Conseil d'Etat en
-        droit administratif issues de l'open data officiel de la justice
-        administrative. Il doit etre interprete comme un outil d'orientation
-        et de productivite, pas comme un conseil juridique.
-        """
-    )
+    _render_hero()
+    _render_kpis(dataset_df, metrics_df, robustness_df, model_config)
+    st.markdown("<div style='height: 1.1rem;'></div>", unsafe_allow_html=True)
 
-    st.error(
-        "Perimetre actuel du MVP : cette application est concue uniquement pour "
-        "des dossiers de droit administratif. Les cas de droit du travail, penal, "
-        "famille ou contrats peuvent etre mal interpretes."
-    )
-
-    st.caption(
-        "Source officielle: https://opendata.justice-administrative.fr "
-        "| Extension possible: CAA et tribunaux administratifs"
-    )
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Objectif metier", "Triage initial")
-    with col2:
-        st.metric(
-            "Categories suivies",
-            dataset_df[TARGET_COLUMN].nunique() if dataset_df is not None else 0,
-        )
-    with col3:
-        st.metric(
-            "Cas illustratifs",
-            len(dataset_df) if dataset_df is not None else 0,
-        )
-
-    st.subheader("Interet business")
-    st.markdown(
-        """
-        - accelerer la pre-analyse des dossiers entrants,
-        - orienter plus vite un dossier vers le bon specialiste,
-        - homogeniser la qualification initiale des litiges,
-        - fournir un signal empirique simple sur des cas similaires.
-        """
-    )
-
-    st.subheader("Vue dataset")
-    if dataset_df is None:
-        st.warning("Le dataset de travail est introuvable.")
+    if section == "Vue d'ensemble":
+        _render_overview(dataset_df, metrics_df)
+    elif section == "Case Studio":
+        _render_case_studio(dataset_df, reference_df, model_config, model)
     else:
-        st.markdown(
-            """
-            Le jeu de donnees actuellement charge provient d'un lot Conseil d'Etat
-            transforme a partir de l'open data officiel de la justice administrative.
-            """
-        )
-        left, right = st.columns((2, 1))
-        with left:
-            st.dataframe(dataset_df.head(10), width="stretch")
-        with right:
-            category_counts = (
-                dataset_df[TARGET_COLUMN]
-                .value_counts()
-                .rename_axis(TARGET_COLUMN)
-                .reset_index(name="count")
-            )
-            category_counts[TARGET_COLUMN] = category_counts[TARGET_COLUMN].map(
-                _humanize_category
-            )
-            st.dataframe(category_counts, width="stretch")
-
-    st.subheader("Comparaison des modeles")
-    if metrics_df is None:
-        st.info(
-            "Aucun resultat disponible pour le moment. Lance `python scripts/train_baselines.py` "
-            "puis `python scripts/main.py`."
-        )
-    else:
-        st.dataframe(_format_metrics(metrics_df), width="stretch", hide_index=True)
-
-        with st.expander("Comment lire les metriques"):
-            st.markdown(
-                """
-                - `Accuracy` : part totale des predictions correctes.
-                - `F1 macro` : moyenne de l'equilibre precision/rappel sur chaque classe, utile quand les classes ne sont pas parfaitement equilibrees.
-                - `Precision macro` : quand le modele predit une classe, a quelle frequence cette prediction est correcte en moyenne.
-                - `Recall macro` : capacite du modele a retrouver chaque classe du dataset en moyenne.
-                """
-            )
-
-    st.subheader("Demo interactive")
-    st.info(
-        "Le modele actuel est entraine sur des decisions de droit administratif. "
-        "Un cas relevant du droit du travail, du penal ou du droit de la famille "
-        "peut donc etre mal oriente."
-    )
-    facts_summary = st.text_area(
-        "Resume les faits de l'affaire (droit administratif uniquement)",
-        placeholder=(
-            "Exemple: Une personne conteste un refus de titre de sejour, "
-            "une decision de prefecture ou un acte administratif."
-        ),
-        height=160,
-    )
-
-    if st.button("Analyser le dossier", type="primary"):
-        if not facts_summary.strip():
-            st.warning("Saisis d'abord un resume de faits.")
-        elif model is None or model_config is None:
-            st.error(
-                "Aucun modele entraine disponible. Lance `python scripts/train_baselines.py`."
-            )
-        else:
-            predicted_category, probability_df = _predict_case(model, facts_summary)
-            specialist_guidance = _specialist_guidance(predicted_category)
-            domain_signal = _detect_legal_domain(facts_summary)
-            top_domain = str(domain_signal["top_domain"])
-            top_domain_score = int(domain_signal["top_score"])
-            domain_is_confident = bool(domain_signal["is_confident"])
-            st.success(
-                "Categorie predite: "
-                f"`{_humanize_category(predicted_category)}`"
-            )
-            st.caption(f"Code interne de la categorie: `{predicted_category}`")
-            st.caption(f"Modele utilise: {model_config['name']}")
-
-            st.markdown("Lecture du perimetre du cas")
-            if domain_is_confident and top_domain != "administratif":
-                matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6])
-                st.error(
-                    f"Ce texte ressemble davantage a un dossier de **{top_domain}** "
-                    f"qu'a un dossier administratif. Le modele administratif est donc "
-                    f"probablement hors perimetre ici. Indices reperes : {matched_terms}."
-                )
-                st.info(
-                    f"**Specialiste plus plausible :** {DOMAIN_SPECIALISTS[top_domain]}"
-                )
-            elif top_domain == "administratif" and top_domain_score >= 2:
-                matched_terms = ", ".join(domain_signal["matched_terms"][top_domain][:6])
-                st.info(
-                    "Le texte contient plusieurs indices compatibles avec le droit "
-                    f"administratif. Indices reperes : {matched_terms}."
-                )
-            else:
-                st.warning(
-                    "Le perimetre juridique du texte reste ambigu. L'orientation "
-                    "automatique doit etre lue avec prudence."
-                )
-
-            st.markdown("Orientation vers le specialiste")
-            if domain_is_confident and top_domain != "administratif":
-                st.warning(
-                    f"Je ne recommande **pas** ici un specialiste administratif comme "
-                    f"orientation principale. Le dossier semble plutot relever du "
-                    f"**{top_domain}**."
-                )
-            else:
-                st.info(
-                    f"**Specialiste recommande :** {specialist_guidance['specialist']}\n\n"
-                    f"**Pourquoi :** {specialist_guidance['orientation']}\n\n"
-                    f"**Dossiers typiques :** {specialist_guidance['examples']}"
-                )
-
-            if probability_df is not None:
-                top_probability = float(probability_df.iloc[0]["probability"])
-                if top_probability < 0.55:
-                    st.warning(
-                        "Le score de confiance reste modere. Il faut lire cette "
-                        "prediction avec prudence, surtout si les faits ne relevent "
-                        "pas du droit administratif."
-                    )
-
-                st.markdown("Probabilites par categorie")
-                st.dataframe(
-                    _format_probability_df(probability_df.head(3)),
-                    width="stretch",
-                    hide_index=True,
-                )
-
-            with st.expander("Pourquoi seulement 3 categories dans ce MVP ?"):
-                st.markdown(
-                    """
-                    Le corpus actuel vient surtout d'un lot Conseil d'Etat en droit administratif.
-                    Les labels du MVP derivent donc de trois grandes familles procedurales :
-
-                    - `Recours pour exces de pouvoir` : on conteste surtout la legalite d'une decision administrative.
-                    - `Plein contentieux` : on demande souvent une condamnation, une indemnisation ou une reforme plus large.
-                    - `Autres recours administratifs` : categorie residuelle pour les recours moins frequents ou plus techniques.
-
-                    Ce n'est pas encore une cartographie complete de tous les specialistes du droit francais.
-                    """
-                )
-
-            st.markdown("Pourquoi cette sortie ?")
-            st.warning(
-                "Le modele actuel est un modele lexical. Il repere surtout des "
-                "mots et groupes de mots, pas une comprehension profonde du sens "
-                "juridique. Une autre formulation des memes faits peut donc produire "
-                "un resultat different."
-            )
-            evidence_df = _top_linear_evidence(model, facts_summary, predicted_category)
-            if evidence_df is not None:
-                st.markdown(
-                    """
-                    Les termes ci-dessous sont les indices lexicaux qui ont le plus
-                    pousse le modele vers la categorie predite. Ce n'est pas une
-                    preuve de causalite juridique et ce n'est pas une lecture du sens
-                    profond du texte.
-                    """
-                )
-                st.dataframe(evidence_df, width="stretch", hide_index=True)
-            else:
-                st.info(
-                    "Le modele utilise ici ne permet pas d'afficher une explication "
-                    "lexicale detaillee pour cette prediction."
-                )
-
-            outcome_df = _empirical_outcomes(dataset_df, predicted_category)
-            if outcome_df is not None:
-                st.markdown(
-                    "Estimation empirique sur des cas administratifs similaires du dataset:"
-                )
-                st.info(
-                    "On ne parle pas ici de `culpabilite`. En contentieux "
-                    "administratif, il faut plutot lire ce tableau comme une "
-                    "indication de qui gagne ou perd le plus souvent. Le "
-                    "`requerant` est la personne, l'entreprise ou l'entite qui a "
-                    "saisi le juge. Si l'issue est `defavorable au requerant`, cela "
-                    "veut dire que le requerant perd et que la partie defenderesse "
-                    "(souvent l'administration) est avantagée."
-                )
-                st.dataframe(
-                    _format_outcome_df(outcome_df),
-                    width="stretch",
-                    hide_index=True,
-                )
-            else:
-                st.info(
-                    "Pas d'estimation empirique disponible pour cette categorie."
-                )
-
-            st.markdown("Jurisprudences administratives proches dans le corpus")
-            if domain_is_confident and top_domain != "administratif":
-                st.warning(
-                    "Je n'affiche pas de rapprochement de jurisprudence administrative "
-                    "comme reference principale ici, car le texte semble hors perimetre "
-                    "du droit administratif."
-                )
-            else:
-                similar_cases_df = _find_similar_jurisprudence(
-                    model,
-                    dataset_df,
-                    reference_df,
-                    facts_summary,
-                )
-                if similar_cases_df is not None:
-                    st.caption(
-                        "Ces references correspondent aux decisions du corpus dont le "
-                        "resume de faits est le plus proche textuellement de votre saisie."
-                    )
-                    st.dataframe(similar_cases_df, width="stretch", hide_index=True)
-                else:
-                    st.info(
-                        "Impossible de calculer pour l'instant un rapprochement fiable "
-                        "avec la jurisprudence du corpus."
-                    )
-
-    st.subheader("Limites")
-    st.markdown(
-        """
-        - Le dataset actuel couvre surtout le droit administratif et non l'ensemble du droit francais.
-        - La source officielle permet d'etendre le projet aux CAA et aux tribunaux administratifs, mais ce MVP reste centre sur le Conseil d'Etat.
-        - Le modele de base est lexical : il est sensible aux mots choisis et peut varier selon la formulation des faits.
-        - Les probabilites sont des signaux statistiques, pas des certitudes.
-        - Toute analyse finale doit rester sous controle humain.
-        """
-    )
+        _render_corpus(dataset_df, metrics_df, robustness_df)
 
 
 if __name__ == "__main__":

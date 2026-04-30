@@ -6,6 +6,9 @@ from pathlib import Path
 import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.decomposition import TruncatedSVD
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import Normalizer
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
@@ -22,11 +25,19 @@ def _build_models() -> dict[str, Pipeline]:
     return {
         "log_reg_legal": Pipeline(
             steps=[
-                ("tfidf", TfidfVectorizer(ngram_range=(1, 2), min_df=1)),
+                (
+                    "tfidf",
+                    TfidfVectorizer(
+                        ngram_range=(1, 2),
+                        min_df=2,
+                        max_df=0.95,
+                        sublinear_tf=True,
+                    ),
+                ),
                 (
                     "classifier",
                     LogisticRegression(
-                        max_iter=1000,
+                        max_iter=2000,
                         random_state=RANDOM_STATE,
                         class_weight="balanced",
                     ),
@@ -35,10 +46,66 @@ def _build_models() -> dict[str, Pipeline]:
         ),
         "linear_svm_legal": Pipeline(
             steps=[
-                ("tfidf", TfidfVectorizer(ngram_range=(1, 2), min_df=1)),
+                (
+                    "tfidf",
+                    TfidfVectorizer(
+                        ngram_range=(1, 2),
+                        min_df=2,
+                        max_df=0.95,
+                        sublinear_tf=True,
+                    ),
+                ),
                 (
                     "classifier",
                     LinearSVC(
+                        random_state=RANDOM_STATE,
+                        class_weight="balanced",
+                    ),
+                ),
+            ]
+        ),
+        "char_svm_legal": Pipeline(
+            steps=[
+                (
+                    "tfidf",
+                    TfidfVectorizer(
+                        analyzer="char_wb",
+                        ngram_range=(3, 5),
+                        min_df=2,
+                        sublinear_tf=True,
+                    ),
+                ),
+                (
+                    "classifier",
+                    LinearSVC(
+                        random_state=RANDOM_STATE,
+                        class_weight="balanced",
+                    ),
+                ),
+            ]
+        ),
+        "lsa_log_reg_legal": Pipeline(
+            steps=[
+                (
+                    "tfidf",
+                    TfidfVectorizer(
+                        ngram_range=(1, 2),
+                        min_df=2,
+                        max_df=0.95,
+                        sublinear_tf=True,
+                    ),
+                ),
+                (
+                    "lsa",
+                    make_pipeline(
+                        TruncatedSVD(n_components=128, random_state=RANDOM_STATE),
+                        Normalizer(copy=False),
+                    ),
+                ),
+                (
+                    "classifier",
+                    LogisticRegression(
+                        max_iter=3000,
                         random_state=RANDOM_STATE,
                         class_weight="balanced",
                     ),

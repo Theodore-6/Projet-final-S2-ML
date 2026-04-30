@@ -1,3 +1,5 @@
 model_key,model_name,model_path,accuracy,f1_macro,precision_macro,recall_macro
-log_reg_legal,TF-IDF + Logistic Regression,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/log_reg_legal.joblib,0.8709677419354839,0.7918602596732836,0.8080259112867809,0.7792483835244526
-linear_svm_legal,TF-IDF + Linear SVM,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/linear_svm_legal.joblib,0.8763440860215054,0.7891179314908129,0.9161092530657747,0.738797794686767
+log_reg_legal,TF-IDF + Logistic Regression,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/log_reg_legal.joblib,0.8817204301075269,0.7992888192776454,0.8154369784804567,0.7867085819073817
+linear_svm_legal,TF-IDF + Linear SVM,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/linear_svm_legal.joblib,0.8655913978494624,0.7650235069589909,0.8283899158310177,0.7310458567022708
+char_svm_legal,Character TF-IDF + Linear SVM,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/char_svm_legal.joblib,0.8763440860215054,0.7891179314908129,0.9161092530657747,0.738797794686767
+lsa_log_reg_legal,Latent Semantic TF-IDF + Logistic Regression,/Users/theodorelemolgat/Desktop/Projet final S2 ML/models/lsa_log_reg_legal.joblib,0.8763440860215054,0.7794599333060872,0.7526588567709572,0.8257004727372319
