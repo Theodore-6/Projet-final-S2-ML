@@ -1,4 +1,6 @@
 joblib
+ipykernel
+nbformat
 pandas
 plotly
 python-dotenv
