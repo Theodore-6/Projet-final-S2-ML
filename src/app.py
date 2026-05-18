@@ -14,7 +14,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
+from scipy.sparse import vstack
 
 try:
     from wordcloud import STOPWORDS as WORDCLOUD_STOPWORDS
@@ -405,7 +407,37 @@ FRENCH_WORDCLOUD_STOPWORDS = {
 }
 
 WORDCLOUD_VISUAL_BLACKLIST = {
+    "administratif",
+    "administrative",
+    "administration",
+    "administrations",
+    "appel",
+    "appelée",
+    "appelee",
+    "article",
+    "articles",
+    "cette",
+    "chambre",
+    "chambres",
+    "code",
+    "codes",
+    "contre",
+    "cour",
+    "cours",
+    "decision",
+    "decisions",
+    "dossier",
+    "droit",
+    "etat",
+    "forme",
+    "homme",
+    "hommes",
     "janvier",
+    "jour",
+    "jours",
+    "juge",
+    "jugement",
+    "jugements",
     "fevrier",
     "février",
     "mars",
@@ -413,9 +445,40 @@ WORDCLOUD_VISUAL_BLACKLIST = {
     "mai",
     "juin",
     "juillet",
+    "juridiction",
+    "juridictionnelle",
+    "juridictions",
+    "madame",
+    "madames",
+    "memoire",
+    "memoires",
+    "mme",
+    "monsieur",
+    "messieurs",
+    "m",
+    "mr",
+    "mrs",
+    "numero",
+    "ordonnance",
+    "ordonnances",
     "aout",
     "août",
+    "part",
+    "partie",
+    "parties",
+    "president",
+    "président",
+    "requete",
+    "requerant",
+    "requérant",
+    "section",
+    "sections",
     "septembre",
+    "societe",
+    "société",
+    "soit",
+    "tribunal",
+    "tribunaux",
     "octobre",
     "novembre",
     "decembre",
@@ -610,6 +673,8 @@ def _inject_css() -> None:
             }
 
             .glass-card {
+                position: relative;
+                overflow: visible;
                 background: var(--surface);
                 border: 1px solid rgba(255, 255, 255, 0.52);
                 border-radius: var(--radius-xl);
@@ -623,6 +688,11 @@ def _inject_css() -> None:
             .glass-card:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 24px 72px rgba(15, 23, 42, 0.1);
+            }
+
+            .tooltip-host {
+                z-index: 30;
+                isolation: isolate;
             }
 
             .kpi-card {
@@ -756,6 +826,8 @@ def _inject_css() -> None:
             }
 
             .annotated-sentence {
+                position: relative;
+                overflow: visible;
                 margin-top: 1rem;
                 padding: 1rem 1.05rem;
                 border-radius: 18px;
@@ -780,6 +852,7 @@ def _inject_css() -> None:
 
             .annotated-token:hover {
                 filter: brightness(0.98);
+                z-index: 120;
             }
 
             .annotated-token .token-tooltip {
@@ -787,7 +860,7 @@ def _inject_css() -> None:
                 opacity: 0;
                 position: absolute;
                 left: 50%;
-                bottom: calc(100% + 10px);
+                top: calc(100% + 10px);
                 transform: translateX(-50%);
                 min-width: 240px;
                 max-width: 320px;
@@ -798,9 +871,21 @@ def _inject_css() -> None:
                 box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
                 font-size: 0.83rem;
                 line-height: 1.45;
-                z-index: 30;
+                z-index: 9999;
                 pointer-events: none;
                 transition: opacity 160ms ease, visibility 160ms ease;
+            }
+
+            .annotated-token .token-tooltip::before {
+                content: "";
+                position: absolute;
+                left: 50%;
+                top: -6px;
+                width: 12px;
+                height: 12px;
+                background: rgba(15, 23, 42, 0.96);
+                transform: translateX(-50%) rotate(45deg);
+                border-radius: 2px;
             }
 
             .annotated-token:hover .token-tooltip {
@@ -1691,7 +1776,7 @@ def _similar_jurisprudence_matches(
     dataset_df: Optional[pd.DataFrame],
     reference_df: Optional[pd.DataFrame],
     facts_summary: str,
-    top_n: int = 8,
+    top_n: Optional[int] = None,
 ) -> Optional[pd.DataFrame]:
     if dataset_df is None or dataset_df.empty:
         return None
@@ -1706,7 +1791,9 @@ def _similar_jurisprudence_matches(
 
     similar_df = dataset_df.reset_index(drop=False).rename(columns={"index": "row_id"}).copy()
     similar_df["similarity_raw"] = similarities
-    similar_df = similar_df.sort_values("similarity_raw", ascending=False).head(top_n)
+    similar_df = similar_df.sort_values("similarity_raw", ascending=False)
+    if top_n is not None:
+        similar_df = similar_df.head(top_n)
 
     if reference_df is not None and "source_file" in similar_df.columns:
         similar_df = similar_df.merge(
@@ -1732,6 +1819,40 @@ def _similar_jurisprudence_matches(
             similar_df[column] = ""
 
     return similar_df
+
+
+def _select_close_jurisprudence(
+    similar_df: Optional[pd.DataFrame],
+    min_neighbors: int = 4,
+    max_neighbors: int = 14,
+) -> pd.DataFrame:
+    if similar_df is None or similar_df.empty:
+        return pd.DataFrame()
+
+    ordered = similar_df.sort_values("similarity_raw", ascending=False).reset_index(drop=True)
+    top_similarity = float(ordered.iloc[0]["similarity_raw"])
+    threshold = max(0.12, min(0.75, top_similarity * 0.68))
+
+    close_df = ordered[ordered["similarity_raw"] >= threshold].copy()
+    if len(close_df) < min_neighbors:
+        close_df = ordered.head(min(min_neighbors, len(ordered))).copy()
+    if len(close_df) > max_neighbors:
+        close_df = close_df.head(max_neighbors).copy()
+
+    return close_df.reset_index(drop=True)
+
+
+def _similarity_green(similarity: float, top_similarity: float) -> str:
+    if top_similarity <= 0:
+        normalized = 0.0
+    else:
+        normalized = max(0.0, min(1.0, similarity / top_similarity))
+
+    red = int(236 - (normalized * 152))
+    green = int(247 - (normalized * 72))
+    blue = int(240 - (normalized * 146))
+    alpha = 0.18 + (normalized * 0.82)
+    return f"rgba({red},{green},{blue},{alpha:.3f})"
 
 
 def _format_similar_jurisprudence(similar_df: pd.DataFrame) -> pd.DataFrame:
@@ -1761,79 +1882,166 @@ def _format_similar_jurisprudence(similar_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_jurisprudence_network(
+    model,
+    dataset_df: Optional[pd.DataFrame],
     facts_summary: str,
     similar_df: Optional[pd.DataFrame],
 ) -> go.Figure:
     figure = go.Figure()
-    if similar_df is None or similar_df.empty:
+    if dataset_df is None or dataset_df.empty or similar_df is None or similar_df.empty:
         figure.update_layout(
-            height=430,
+            height=520,
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
         )
         return figure
 
-    chart_df = similar_df.copy().reset_index(drop=True)
-    if "similarity_raw" not in chart_df.columns:
-        chart_df["similarity_raw"] = chart_df["similarity"] / 100.0
-
-    base_angles = np.linspace(0, 2 * np.pi, len(chart_df), endpoint=False)
-    radii = 1.6 - (chart_df["similarity_raw"].clip(0, 1) * 0.8)
-    chart_df["x"] = np.cos(base_angles) * radii
-    chart_df["y"] = np.sin(base_angles) * radii
-
-    edge_x: list[float] = []
-    edge_y: list[float] = []
-    for _, row in chart_df.iterrows():
-        edge_x.extend([0.0, float(row["x"]), None])
-        edge_y.extend([0.0, float(row["y"]), None])
-
-    figure.add_trace(
-        go.Scatter(
-            x=edge_x,
-            y=edge_y,
-            mode="lines",
-            line=dict(color="rgba(148,163,184,0.55)", width=1.8),
-            hoverinfo="skip",
-            showlegend=False,
+    vectorizer = _get_similarity_vectorizer(model)
+    if vectorizer is None or not hasattr(vectorizer, "transform"):
+        figure.update_layout(
+            height=520,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
         )
+        return figure
+
+    corpus_df = similar_df.copy().sort_values("similarity_raw", ascending=False).reset_index(drop=True)
+    focus_df = _select_close_jurisprudence(corpus_df)
+    if focus_df.empty:
+        focus_df = corpus_df.head(min(6, len(corpus_df))).copy()
+
+    dataset_vectors = vectorizer.transform(dataset_df[TEXT_COLUMN].astype(str))
+    query_vector = vectorizer.transform([facts_summary])
+    coordinates = TruncatedSVD(n_components=2, random_state=42).fit_transform(
+        vstack([dataset_vectors, query_vector])
     )
 
-    if len(chart_df) > 1:
-        inter_x: list[float] = []
-        inter_y: list[float] = []
-        for left_index in range(len(chart_df)):
-            for right_index in range(left_index + 1, len(chart_df)):
-                left_row = chart_df.iloc[left_index]
-                right_row = chart_df.iloc[right_index]
-                pair_similarity = 1 - min(
-                    abs(float(left_row["similarity_raw"]) - float(right_row["similarity_raw"])),
-                    1.0,
-                )
-                if pair_similarity >= 0.82:
-                    inter_x.extend([float(left_row["x"]), float(right_row["x"]), None])
-                    inter_y.extend([float(left_row["y"]), float(right_row["y"]), None])
+    node_coordinates = coordinates[:-1]
+    query_point = coordinates[-1]
+    node_coordinates = node_coordinates - query_point
+    scale = max(float(np.abs(node_coordinates).max()), 1e-6)
+    node_coordinates = node_coordinates / scale
 
-        if inter_x:
+    projected_df = dataset_df.reset_index(drop=False).rename(columns={"index": "row_id"}).copy()
+    projected_df["x"] = node_coordinates[:, 0]
+    projected_df["y"] = node_coordinates[:, 1]
+    projected_df = projected_df.merge(
+        corpus_df[
+            [
+                "row_id",
+                "similarity_raw",
+                "similarity",
+                "resume_court",
+                "categorie_lisible",
+                "numero_ecli",
+                "numero_dossier",
+                "nom_juridiction",
+                "solution",
+                "date_lecture",
+            ]
+        ],
+        on="row_id",
+        how="left",
+    )
+
+    focus_df = focus_df.merge(
+        projected_df[["row_id", "x", "y", "similarity_raw", "similarity"]],
+        on="row_id",
+        how="left",
+        suffixes=("", "_projected"),
+    )
+    if "similarity_raw_projected" in focus_df.columns:
+        focus_df["similarity_raw"] = focus_df["similarity_raw_projected"]
+        focus_df["similarity"] = focus_df["similarity_projected"]
+        focus_df = focus_df.drop(columns=["similarity_raw_projected", "similarity_projected"])
+
+    strongest_similarity = float(corpus_df["similarity_raw"].max())
+
+    for row in focus_df.itertuples(index=False):
+        edge_width = 1.4 + (float(row.similarity_raw) / max(strongest_similarity, 1e-6)) * 4.6
+        figure.add_trace(
+            go.Scatter(
+                x=[0.0, float(row.x)],
+                y=[0.0, float(row.y)],
+                mode="lines",
+                line=dict(
+                    color=_similarity_green(float(row.similarity_raw), strongest_similarity),
+                    width=edge_width,
+                ),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    if len(focus_df) > 1:
+        focus_vectors = dataset_vectors[focus_df["row_id"].astype(int).tolist()]
+        pairwise = cosine_similarity(focus_vectors)
+        used_pairs: set[tuple[int, int]] = set()
+        focus_lookup = {
+            int(row.row_id): (float(row.x), float(row.y))
+            for row in focus_df.itertuples(index=False)
+        }
+        focus_row_ids = focus_df["row_id"].astype(int).tolist()
+        for left_index, left_row_id in enumerate(focus_row_ids):
+            candidate_scores = pairwise[left_index].copy()
+            candidate_scores[left_index] = -1.0
+            right_index = int(np.argmax(candidate_scores))
+            if float(candidate_scores[right_index]) < 0.32:
+                continue
+            right_row_id = int(focus_row_ids[right_index])
+            pair_key = tuple(sorted((int(left_row_id), right_row_id)))
+            if pair_key in used_pairs:
+                continue
+            used_pairs.add(pair_key)
+            left_x, left_y = focus_lookup[int(left_row_id)]
+            right_x, right_y = focus_lookup[right_row_id]
             figure.add_trace(
                 go.Scatter(
-                    x=inter_x,
-                    y=inter_y,
+                    x=[left_x, right_x],
+                    y=[left_y, right_y],
                     mode="lines",
-                    line=dict(color="rgba(99,102,241,0.18)", width=1.1, dash="dot"),
+                    line=dict(color="rgba(21,128,61,0.20)", width=1.15, dash="dot"),
                     hoverinfo="skip",
                     showlegend=False,
                 )
             )
 
-    node_colors = [
-        ANNOTATION_COLORS.get(str(category), "rgba(15,23,42,0.22)")
-        for category in chart_df[TARGET_COLUMN].tolist()
-    ]
-    node_sizes = (chart_df["similarity_raw"] * 28).clip(lower=16).tolist()
-    node_text = []
-    for row in chart_df.itertuples(index=False):
-        node_text.append(
+    corpus_hover = []
+    for row in projected_df.itertuples(index=False):
+        corpus_hover.append(
+            "<br>".join(
+                [
+                    f"<b>{_humanize_category(str(getattr(row, TARGET_COLUMN)))}</b>",
+                    f"Proximite textuelle : {float(getattr(row, 'similarity', 0.0)):.1f}%",
+                    f"Juridiction : {getattr(row, 'nom_juridiction', '') or 'n/r'}",
+                    f"ECLI : {getattr(row, 'numero_ecli', '') or 'n/r'}",
+                    f"Extrait : {html.escape(str(getattr(row, 'resume_court', '')))}",
+                ]
+            )
+        )
+
+    figure.add_trace(
+        go.Scatter(
+            x=projected_df["x"],
+            y=projected_df["y"],
+            mode="markers",
+            marker=dict(
+                size=(projected_df["similarity_raw"] * 13).clip(lower=5.5, upper=16).tolist(),
+                color=[
+                    _similarity_green(float(score), strongest_similarity)
+                    for score in projected_df["similarity_raw"].fillna(0).tolist()
+                ],
+                line=dict(color="rgba(15,23,42,0.08)", width=0.6),
+            ),
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=corpus_hover,
+            name="Corpus",
+        )
+    )
+
+    focus_hover = []
+    for row in focus_df.itertuples(index=False):
+        focus_hover.append(
             "<br>".join(
                 [
                     f"<b>{_humanize_category(str(getattr(row, TARGET_COLUMN)))}</b>",
@@ -1847,20 +2055,23 @@ def _build_jurisprudence_network(
 
     figure.add_trace(
         go.Scatter(
-            x=chart_df["x"],
-            y=chart_df["y"],
+            x=focus_df["x"],
+            y=focus_df["y"],
             mode="markers+text",
-            text=[f"J{i + 1}" for i in range(len(chart_df))],
-            textposition="middle center",
-            textfont=dict(color="#0f172a", size=11),
+            text=[f"J{i + 1}" for i in range(len(focus_df))],
+            textposition="top center",
+            textfont=dict(color="#14532d", size=11),
             marker=dict(
-                size=node_sizes,
-                color=node_colors,
-                line=dict(color="rgba(15,23,42,0.18)", width=1.6),
+                size=(focus_df["similarity_raw"] * 18).clip(lower=12, upper=24).tolist(),
+                color=[
+                    _similarity_green(float(score), strongest_similarity)
+                    for score in focus_df["similarity_raw"].tolist()
+                ],
+                line=dict(color="rgba(20,83,45,0.55)", width=2.2),
             ),
             hovertemplate="%{customdata}<extra></extra>",
-            customdata=node_text,
-            name="Jurisprudences",
+            customdata=focus_hover,
+            name="Voisins proches",
         )
     )
 
@@ -1887,7 +2098,7 @@ def _build_jurisprudence_network(
     )
 
     figure.update_layout(
-        height=430,
+        height=520,
         margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -1973,6 +2184,105 @@ def _top_linear_evidence(
         ]
     )
     return evidence_df
+
+
+def _build_evidence_decay_chart(evidence_items: list[dict[str, object]]) -> Optional[go.Figure]:
+    if not evidence_items:
+        return None
+
+    chart_df = pd.DataFrame(evidence_items).copy()
+    if chart_df.empty or "Contribution" not in chart_df.columns:
+        return None
+
+    chart_df = chart_df.sort_values("Contribution", ascending=False).reset_index(drop=True)
+    total = float(chart_df["Contribution"].sum())
+    if total <= 0:
+        return None
+
+    chart_df["rank"] = np.arange(1, len(chart_df) + 1)
+    chart_df["importance_pct"] = (chart_df["Contribution"] / total * 100).round(1)
+    chart_df["label"] = chart_df["display_name"].astype(str).str.slice(0, 46)
+
+    figure = go.Figure()
+    figure.add_trace(
+        go.Bar(
+            x=chart_df["rank"],
+            y=chart_df["importance_pct"],
+            marker=dict(
+                color=[
+                    f"rgba(22, 163, 74, {0.28 + 0.62 * (1 - (idx / max(len(chart_df) - 1, 1))) :.3f})"
+                    for idx in range(len(chart_df))
+                ],
+                line=dict(color="rgba(20,83,45,0.20)", width=1),
+            ),
+            customdata=np.stack(
+                [chart_df["label"], chart_df["Contribution"].round(4)],
+                axis=1,
+            ),
+            hovertemplate=(
+                "Rang %{x}<br>"
+                "Indice : %{customdata[0]}<br>"
+                "Part relative : %{y:.1f}%<br>"
+                "Contribution brute : %{customdata[1]}<extra></extra>"
+            ),
+            name="Part relative",
+        )
+    )
+    figure.add_trace(
+        go.Scatter(
+            x=chart_df["rank"],
+            y=chart_df["importance_pct"],
+            mode="lines+markers",
+            line=dict(color="rgba(20,83,45,0.92)", width=2.6),
+            marker=dict(size=8, color="rgba(20,83,45,0.96)"),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    figure.update_layout(
+        height=330,
+        margin=dict(l=0, r=0, t=12, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        bargap=0.34,
+        xaxis=dict(
+            title="Rang des indices",
+            tickmode="array",
+            tickvals=chart_df["rank"].tolist(),
+            showgrid=False,
+            color="#667085",
+        ),
+        yaxis=dict(
+            title="Part relative (%)",
+            showgrid=True,
+            gridcolor="rgba(15, 23, 42, 0.08)",
+            zeroline=False,
+            color="#667085",
+        ),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
+def _importance_green_style(importance: float) -> str:
+    normalized = max(0.0, min(1.0, importance))
+    red = int(235 - normalized * 164)
+    green = int(248 - normalized * 74)
+    blue = int(239 - normalized * 146)
+    border_alpha = 0.16 + normalized * 0.28
+    shadow_alpha = 0.06 + normalized * 0.18
+    text_color = "#14532d" if normalized >= 0.55 else "#166534"
+    return (
+        f"background: rgba({red}, {green}, {blue}, {0.22 + normalized * 0.42:.3f});"
+        f"border-color: rgba(20, 83, 45, {border_alpha:.3f});"
+        f"box-shadow: inset 0 -1px 0 rgba(255,255,255,0.24), 0 2px 10px rgba(20,83,45,{shadow_alpha:.3f});"
+        f"color: {text_color};"
+    )
 
 
 def _normalized_text_with_map(text: str) -> tuple[str, list[int]]:
@@ -2100,6 +2410,15 @@ def _build_inline_annotations(
         selected_annotations.append(candidate)
         occupied_positions.update(span_positions)
 
+    if selected_annotations:
+        weights = [float(item["weight"]) for item in selected_annotations]
+        min_weight = min(weights)
+        max_weight = max(weights)
+        spread = max(max_weight - min_weight, 1e-6)
+        for item in selected_annotations:
+            normalized = (float(item["weight"]) - min_weight) / spread
+            item["importance"] = 0.28 + normalized * 0.72
+
     return sorted(selected_annotations, key=lambda item: int(item["start"]))
 
 
@@ -2121,11 +2440,13 @@ def _render_annotated_sentence(
         end = int(annotation["end"])
         tone = str(annotation["tone"])
         tooltip = str(annotation["tooltip"])
+        importance = float(annotation.get("importance", 0.45))
+        token_style = _importance_green_style(importance)
 
         chunks.append(html.escape(facts_summary[cursor:start]))
         surface = html.escape(facts_summary[start:end])
         chunks.append(
-            f'<span class="annotated-token annotation-{tone}" title="{html.escape(re.sub("<[^>]+>", " ", tooltip))}">'
+            f'<span class="annotated-token annotation-{tone}" style="{token_style}">'
             f"{surface}<span class=\"token-tooltip\">{tooltip}</span></span>"
         )
         cursor = end
@@ -2668,7 +2989,7 @@ def _render_case_studio(
         model,
         facts_summary,
         predicted_category,
-        top_n=8,
+        top_n=10,
     )
     inline_annotations = _build_inline_annotations(
         facts_summary,
@@ -2679,10 +3000,10 @@ def _render_case_studio(
     )
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-    _glass_open()
+    _glass_open("tooltip-host")
     _section_header(
         "Phrase analysee",
-        "Les mots ou expressions les plus influents sont surlignes directement dans la phrase. Survole-les pour comprendre pourquoi ils comptent.",
+        "Les mots ou expressions les plus influents sont surlignes directement dans la phrase. Plus le vert est fonce, plus l'indice pese dans la lecture actuelle. Survole-les pour comprendre pourquoi ils comptent.",
     )
     st.markdown(
         _render_annotated_sentence(facts_summary, inline_annotations),
@@ -2718,11 +3039,27 @@ def _render_case_studio(
             unsafe_allow_html=True,
         )
 
-        evidence_df = _top_linear_evidence(model, facts_summary, predicted_category)
-        if evidence_df is not None:
-            st.dataframe(evidence_df, width="stretch", hide_index=True)
-        else:
-            st.info("Aucune evidence lexicale exploitable n'a pu etre extraite.")
+        evidence_df = _top_linear_evidence(model, facts_summary, predicted_category, top_n=10)
+        evidence_tabs = st.tabs(["Indices principaux", "Importance decroissante"])
+        with evidence_tabs[0]:
+            if evidence_df is not None:
+                st.dataframe(evidence_df, width="stretch", hide_index=True)
+            else:
+                st.info("Aucune evidence lexicale exploitable n'a pu etre extraite.")
+        with evidence_tabs[1]:
+            evidence_chart = _build_evidence_decay_chart(evidence_items)
+            if evidence_chart is not None:
+                st.plotly_chart(
+                    evidence_chart,
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+                st.caption(
+                    "Lecture : le rang 1 correspond a l'indice qui contribue le plus a la sortie actuelle ; "
+                    "la courbe montre ensuite comment cette importance diminue."
+                )
+            else:
+                st.info("Pas assez d'indices exploitables pour construire une courbe d'importance.")
         _glass_close()
 
     with analysis_right:
@@ -2770,16 +3107,28 @@ def _render_case_studio(
             dataset_df,
             reference_df,
             facts_summary,
-            top_n=8,
+            top_n=None,
         )
         if similar_cases_raw is not None:
+            close_cases_df = _select_close_jurisprudence(similar_cases_raw)
             st.plotly_chart(
-                _build_jurisprudence_network(facts_summary, similar_cases_raw),
+                _build_jurisprudence_network(
+                    model,
+                    dataset_df,
+                    facts_summary,
+                    similar_cases_raw,
+                ),
                 width="stretch",
                 config={"displayModeBar": False},
             )
+            st.caption(
+                "Lecture de la carte : le cas utilisateur est au centre. Plus un noeud "
+                "de jurisprudence est vert fonce, plus il est proche textuellement du cas."
+            )
             st.dataframe(
-                _format_similar_jurisprudence(similar_cases_raw),
+                _format_similar_jurisprudence(
+                    close_cases_df if not close_cases_df.empty else similar_cases_raw.head(8)
+                ),
                 width="stretch",
                 hide_index=True,
             )
