@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+import html
+import math
+import re
+import sys
+from pathlib import Path
 from typing import Optional
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    from wordcloud import STOPWORDS as WORDCLOUD_STOPWORDS
+    from wordcloud import WordCloud
+except ImportError:  # pragma: no cover - graceful fallback for local envs
+    WORDCLOUD_STOPWORDS = set()
+    WordCloud = None
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from config import (
     CLASS_METRICS_FILE,
@@ -272,6 +292,156 @@ DOMAIN_LABELS = {
     "travail": "Droit du travail",
     "penal": "Droit penal",
     "famille": "Droit de la famille",
+}
+
+ANNOTATION_COLORS = {
+    "exces_de_pouvoir": "rgba(244, 114, 182, 0.22)",
+    "plein_contentieux": "rgba(59, 130, 246, 0.20)",
+    "autres_recours": "rgba(148, 163, 184, 0.26)",
+    "travail": "rgba(249, 115, 22, 0.22)",
+    "penal": "rgba(239, 68, 68, 0.20)",
+    "famille": "rgba(16, 185, 129, 0.20)",
+    "administratif": "rgba(99, 102, 241, 0.18)",
+}
+
+ADMIN_GROUP_EXPLANATIONS = {
+    ("exces_de_pouvoir", "decision"): (
+        "Signal d'acte administratif contesté",
+        "Ce terme renforce l'hypothèse d'un recours pour exces de pouvoir contre une decision administrative.",
+    ),
+    ("exces_de_pouvoir", "autority"): (
+        "Signal d'autorité publique",
+        "La presence d'une autorite administrative pousse le dossier vers le contentieux administratif de legalite.",
+    ),
+    ("exces_de_pouvoir", "immigration"): (
+        "Signal d'immigration",
+        "Le vocabulaire du sejour, du visa ou de l'asile renforce souvent les recours contre des refus ou decisions prefectorales.",
+    ),
+    ("plein_contentieux", "money"): (
+        "Signal financier / indemnitaire",
+        "Ce terme suggere une demande de somme, de condamnation ou de remboursement, typique du plein contentieux.",
+    ),
+    ("plein_contentieux", "harm"): (
+        "Signal de responsabilite",
+        "Le vocabulaire du prejudice ou du dommage oriente vers une logique indemnitaire de plein contentieux.",
+    ),
+    ("plein_contentieux", "fiscal_social"): (
+        "Signal fiscal ou social",
+        "Ce terme renforce les litiges ou l'on discute une charge, une cotisation, une decharge ou une prestation.",
+    ),
+    ("autres_recours", "procedure"): (
+        "Signal procedural",
+        "Ce terme correspond davantage a un recours technique ou procedural qu'a une contestation classique de legalite ou d'indemnisation.",
+    ),
+}
+
+DOMAIN_EXPLANATIONS = {
+    "travail": "Signal hors perimetre administratif : vocabulaire typique d'un litige de travail.",
+    "penal": "Signal hors perimetre administratif : vocabulaire associe a une procedure ou qualification penale.",
+    "famille": "Signal hors perimetre administratif : vocabulaire lie au droit de la famille.",
+    "administratif": "Signal de contexte administratif general.",
+}
+
+FRENCH_WORDCLOUD_STOPWORDS = {
+    "alors",
+    "apres",
+    "ainsi",
+    "au",
+    "aux",
+    "avec",
+    "avoir",
+    "ce",
+    "ces",
+    "cet",
+    "cette",
+    "comme",
+    "dans",
+    "de",
+    "des",
+    "du",
+    "elle",
+    "elles",
+    "en",
+    "entre",
+    "est",
+    "et",
+    "etre",
+    "fait",
+    "faits",
+    "il",
+    "ils",
+    "la",
+    "le",
+    "les",
+    "leur",
+    "mais",
+    "meme",
+    "ne",
+    "ni",
+    "nous",
+    "ou",
+    "par",
+    "pas",
+    "plus",
+    "pour",
+    "que",
+    "qui",
+    "sa",
+    "se",
+    "ses",
+    "son",
+    "sur",
+    "une",
+    "un",
+    "vos",
+    "votre",
+    "requete",
+    "requérant",
+    "requerant",
+    "demande",
+    "demander",
+    "decision",
+    "administrative",
+}
+
+WORDCLOUD_VISUAL_BLACKLIST = {
+    "janvier",
+    "fevrier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "aout",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "decembre",
+    "décembre",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "2017",
+    "2018",
+    "2019",
+    "2020",
+    "2021",
+    "2022",
+    "2023",
+    "2024",
+    "2025",
+    "2026",
 }
 
 REFERENCE_METADATA_FILE = DATA_DIR / "processed_conseil_etat_june_2022.csv"
@@ -583,6 +753,83 @@ def _inject_css() -> None:
                 color: var(--muted);
                 font-size: 0.9rem;
                 line-height: 1.6;
+            }
+
+            .annotated-sentence {
+                margin-top: 1rem;
+                padding: 1rem 1.05rem;
+                border-radius: 18px;
+                border: 1px solid rgba(255, 255, 255, 0.58);
+                background: rgba(255, 255, 255, 0.55);
+                color: var(--text);
+                line-height: 1.9;
+                font-size: 1rem;
+            }
+
+            .annotated-token {
+                position: relative;
+                display: inline;
+                padding: 0.08rem 0.28rem;
+                border-radius: 0.55rem;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                cursor: help;
+                box-decoration-break: clone;
+                -webkit-box-decoration-break: clone;
+                transition: filter 140ms ease, transform 140ms ease;
+            }
+
+            .annotated-token:hover {
+                filter: brightness(0.98);
+            }
+
+            .annotated-token .token-tooltip {
+                visibility: hidden;
+                opacity: 0;
+                position: absolute;
+                left: 50%;
+                bottom: calc(100% + 10px);
+                transform: translateX(-50%);
+                min-width: 240px;
+                max-width: 320px;
+                padding: 0.72rem 0.82rem;
+                border-radius: 14px;
+                background: rgba(15, 23, 42, 0.96);
+                color: #f8fafc;
+                box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+                font-size: 0.83rem;
+                line-height: 1.45;
+                z-index: 30;
+                pointer-events: none;
+                transition: opacity 160ms ease, visibility 160ms ease;
+            }
+
+            .annotated-token:hover .token-tooltip {
+                visibility: visible;
+                opacity: 1;
+            }
+
+            .annotation-exces_de_pouvoir {
+                background: rgba(244, 114, 182, 0.22);
+            }
+
+            .annotation-plein_contentieux {
+                background: rgba(59, 130, 246, 0.20);
+            }
+
+            .annotation-autres_recours {
+                background: rgba(148, 163, 184, 0.26);
+            }
+
+            .annotation-travail {
+                background: rgba(249, 115, 22, 0.22);
+            }
+
+            .annotation-penal {
+                background: rgba(239, 68, 68, 0.20);
+            }
+
+            .annotation-famille {
+                background: rgba(16, 185, 129, 0.20);
             }
         </style>
         """,
@@ -1439,12 +1686,12 @@ def _format_outcome_df(outcome_df: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
-def _find_similar_jurisprudence(
+def _similar_jurisprudence_matches(
     model,
     dataset_df: Optional[pd.DataFrame],
     reference_df: Optional[pd.DataFrame],
     facts_summary: str,
-    top_n: int = 3,
+    top_n: int = 8,
 ) -> Optional[pd.DataFrame]:
     if dataset_df is None or dataset_df.empty:
         return None
@@ -1457,9 +1704,9 @@ def _find_similar_jurisprudence(
     query_vector = vectorizer.transform([facts_summary])
     similarities = cosine_similarity(query_vector, dataset_vectors).ravel()
 
-    similar_df = dataset_df.copy()
-    similar_df["similarity"] = similarities
-    similar_df = similar_df.sort_values("similarity", ascending=False).head(top_n)
+    similar_df = dataset_df.reset_index(drop=False).rename(columns={"index": "row_id"}).copy()
+    similar_df["similarity_raw"] = similarities
+    similar_df = similar_df.sort_values("similarity_raw", ascending=False).head(top_n)
 
     if reference_df is not None and "source_file" in similar_df.columns:
         similar_df = similar_df.merge(
@@ -1470,7 +1717,7 @@ def _find_similar_jurisprudence(
         )
 
     similar_df["categorie_lisible"] = similar_df[TARGET_COLUMN].map(_humanize_category)
-    similar_df["similarity"] = (similar_df["similarity"] * 100).round(1)
+    similar_df["similarity"] = (similar_df["similarity_raw"] * 100).round(1)
     similar_df["resume_court"] = (
         similar_df[TEXT_COLUMN]
         .astype(str)
@@ -1484,6 +1731,10 @@ def _find_similar_jurisprudence(
         if column not in similar_df.columns:
             similar_df[column] = ""
 
+    return similar_df
+
+
+def _format_similar_jurisprudence(similar_df: pd.DataFrame) -> pd.DataFrame:
     return similar_df.rename(
         columns={
             "numero_ecli": "ECLI",
@@ -1509,34 +1760,176 @@ def _find_similar_jurisprudence(
     ]
 
 
-def _top_linear_evidence(
+def _build_jurisprudence_network(
+    facts_summary: str,
+    similar_df: Optional[pd.DataFrame],
+) -> go.Figure:
+    figure = go.Figure()
+    if similar_df is None or similar_df.empty:
+        figure.update_layout(
+            height=430,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return figure
+
+    chart_df = similar_df.copy().reset_index(drop=True)
+    if "similarity_raw" not in chart_df.columns:
+        chart_df["similarity_raw"] = chart_df["similarity"] / 100.0
+
+    base_angles = np.linspace(0, 2 * np.pi, len(chart_df), endpoint=False)
+    radii = 1.6 - (chart_df["similarity_raw"].clip(0, 1) * 0.8)
+    chart_df["x"] = np.cos(base_angles) * radii
+    chart_df["y"] = np.sin(base_angles) * radii
+
+    edge_x: list[float] = []
+    edge_y: list[float] = []
+    for _, row in chart_df.iterrows():
+        edge_x.extend([0.0, float(row["x"]), None])
+        edge_y.extend([0.0, float(row["y"]), None])
+
+    figure.add_trace(
+        go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            mode="lines",
+            line=dict(color="rgba(148,163,184,0.55)", width=1.8),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    if len(chart_df) > 1:
+        inter_x: list[float] = []
+        inter_y: list[float] = []
+        for left_index in range(len(chart_df)):
+            for right_index in range(left_index + 1, len(chart_df)):
+                left_row = chart_df.iloc[left_index]
+                right_row = chart_df.iloc[right_index]
+                pair_similarity = 1 - min(
+                    abs(float(left_row["similarity_raw"]) - float(right_row["similarity_raw"])),
+                    1.0,
+                )
+                if pair_similarity >= 0.82:
+                    inter_x.extend([float(left_row["x"]), float(right_row["x"]), None])
+                    inter_y.extend([float(left_row["y"]), float(right_row["y"]), None])
+
+        if inter_x:
+            figure.add_trace(
+                go.Scatter(
+                    x=inter_x,
+                    y=inter_y,
+                    mode="lines",
+                    line=dict(color="rgba(99,102,241,0.18)", width=1.1, dash="dot"),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+
+    node_colors = [
+        ANNOTATION_COLORS.get(str(category), "rgba(15,23,42,0.22)")
+        for category in chart_df[TARGET_COLUMN].tolist()
+    ]
+    node_sizes = (chart_df["similarity_raw"] * 28).clip(lower=16).tolist()
+    node_text = []
+    for row in chart_df.itertuples(index=False):
+        node_text.append(
+            "<br>".join(
+                [
+                    f"<b>{_humanize_category(str(getattr(row, TARGET_COLUMN)))}</b>",
+                    f"Proximite textuelle : {float(row.similarity):.1f}%",
+                    f"Juridiction : {getattr(row, 'nom_juridiction', '') or 'n/r'}",
+                    f"ECLI : {getattr(row, 'numero_ecli', '') or 'n/r'}",
+                    f"Extrait : {html.escape(str(row.resume_court))}",
+                ]
+            )
+        )
+
+    figure.add_trace(
+        go.Scatter(
+            x=chart_df["x"],
+            y=chart_df["y"],
+            mode="markers+text",
+            text=[f"J{i + 1}" for i in range(len(chart_df))],
+            textposition="middle center",
+            textfont=dict(color="#0f172a", size=11),
+            marker=dict(
+                size=node_sizes,
+                color=node_colors,
+                line=dict(color="rgba(15,23,42,0.18)", width=1.6),
+            ),
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=node_text,
+            name="Jurisprudences",
+        )
+    )
+
+    figure.add_trace(
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="markers+text",
+            text=["Cas"],
+            textposition="middle center",
+            textfont=dict(color="#ffffff", size=12),
+            marker=dict(
+                size=34,
+                color="rgba(15,23,42,0.94)",
+                line=dict(color="rgba(255,255,255,0.92)", width=2),
+            ),
+            hovertemplate=(
+                "<b>Votre cas</b><br>"
+                + html.escape(facts_summary[:220].strip())
+                + "<extra></extra>"
+            ),
+            name="Cas utilisateur",
+        )
+    )
+
+    figure.update_layout(
+        height=430,
+        margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        showlegend=False,
+        font=dict(
+            family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+            color="#0f172a",
+        ),
+    )
+    return figure
+
+
+def _linear_evidence_items(
     model, facts_summary: str, predicted_category: str, top_n: int = 6
-) -> Optional[pd.DataFrame]:
+) -> list[dict[str, object]]:
     pipeline_steps = getattr(model, "named_steps", {})
     feature_extractor = pipeline_steps.get("tfidf") or pipeline_steps.get("features")
     classifier = pipeline_steps.get("classifier")
     latent_step = pipeline_steps.get("lsa")
 
     if feature_extractor is None or classifier is None:
-        return None
+        return []
 
     if not hasattr(feature_extractor, "transform") or not hasattr(
         feature_extractor, "get_feature_names_out"
     ):
-        return None
+        return []
 
     if not hasattr(classifier, "coef_") or not hasattr(classifier, "classes_"):
-        return None
+        return []
 
     # For latent semantic pipelines, classifier coefficients live in the
     # reduced latent space rather than directly in the TF-IDF feature space.
     # A token-level contribution table would be misleading here, so we skip it.
     if latent_step is not None:
-        return None
+        return []
 
     class_labels = list(classifier.classes_)
     if predicted_category not in class_labels:
-        return None
+        return []
 
     row = feature_extractor.transform([facts_summary])
     class_index = class_labels.index(predicted_category)
@@ -1549,21 +1942,273 @@ def _top_linear_evidence(
         if contribution_value <= 0:
             continue
         feature_name = str(feature_names[feature_index])
-        feature_name = feature_name.replace("word_tfidf__", "")
-        feature_name = feature_name.replace("signals__", "")
-        feature_name = feature_name.replace("signal_", "Signal metier : ")
+        display_name = feature_name.replace("word_tfidf__", "")
+        display_name = display_name.replace("signals__", "")
+        display_name = display_name.replace("signal_", "Signal metier : ")
         evidence.append(
             {
-                "Terme repere dans le texte": feature_name,
+                "feature_name": feature_name,
+                "display_name": display_name,
                 "Contribution": round(contribution_value, 4),
             }
         )
 
+    return sorted(evidence, key=lambda item: item["Contribution"], reverse=True)[:top_n]
+
+
+def _top_linear_evidence(
+    model, facts_summary: str, predicted_category: str, top_n: int = 6
+) -> Optional[pd.DataFrame]:
+    evidence = _linear_evidence_items(model, facts_summary, predicted_category, top_n=top_n)
     if not evidence:
         return None
 
-    evidence_df = pd.DataFrame(evidence).sort_values("Contribution", ascending=False)
-    return evidence_df.head(top_n)
+    evidence_df = pd.DataFrame(
+        [
+            {
+                "Terme repere dans le texte": item["display_name"],
+                "Contribution": item["Contribution"],
+            }
+            for item in evidence
+        ]
+    )
+    return evidence_df
+
+
+def _normalized_text_with_map(text: str) -> tuple[str, list[int]]:
+    normalized_chars: list[str] = []
+    index_map: list[int] = []
+    for index, character in enumerate(text):
+        normalized_character = _normalize_text(character)
+        for normalized_unit in normalized_character:
+            normalized_chars.append(normalized_unit)
+            index_map.append(index)
+    return "".join(normalized_chars), index_map
+
+
+def _find_keyword_spans(text: str, keyword: str) -> list[tuple[int, int]]:
+    normalized_text, index_map = _normalized_text_with_map(text)
+    normalized_keyword = _normalize_text(keyword).strip()
+    if not normalized_keyword:
+        return []
+
+    spans: list[tuple[int, int]] = []
+    start = 0
+    while True:
+        position = normalized_text.find(normalized_keyword, start)
+        if position == -1:
+            break
+        end_position = position + len(normalized_keyword)
+        spans.append((index_map[position], index_map[end_position - 1] + 1))
+        start = end_position
+    return spans
+
+
+def _is_lexical_term_useful(term: str) -> bool:
+    cleaned = term.strip().lower()
+    if len(cleaned) <= 2:
+        return False
+    if cleaned in FRENCH_WORDCLOUD_STOPWORDS:
+        return False
+    if cleaned.startswith("signal metier"):
+        return False
+    if re.fullmatch(r"[0-9]+", cleaned):
+        return False
+    return True
+
+
+def _build_inline_annotations(
+    facts_summary: str,
+    predicted_category: str,
+    top_domain: str,
+    domain_signal: dict[str, object],
+    evidence_items: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    annotation_candidates: list[dict[str, object]] = []
+
+    for group_name, keywords in ADMIN_CATEGORY_RULES.get(predicted_category, {}).items():
+        title, explanation = ADMIN_GROUP_EXPLANATIONS.get(
+            (predicted_category, group_name),
+            (
+                "Signal juridique",
+                f"Ce terme pousse le dossier vers {_humanize_category(predicted_category).lower()}.",
+            ),
+        )
+        for keyword in keywords:
+            for start, end in _find_keyword_spans(facts_summary, keyword):
+                annotation_candidates.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "tone": predicted_category,
+                        "weight": 5.0 + (end - start),
+                        "tooltip": (
+                            f"<strong>{html.escape(keyword)}</strong><br>"
+                            f"{html.escape(title)}<br>"
+                            f"{html.escape(explanation)}"
+                        ),
+                    }
+                )
+
+    if top_domain != "administratif":
+        for keyword in domain_signal.get("matched_terms", {}).get(top_domain, []):
+            for start, end in _find_keyword_spans(facts_summary, keyword):
+                annotation_candidates.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "tone": top_domain,
+                        "weight": 4.0 + (end - start),
+                        "tooltip": (
+                            f"<strong>{html.escape(keyword)}</strong><br>"
+                            f"Signal de domaine : {html.escape(DOMAIN_LABELS.get(top_domain, top_domain.title()))}<br>"
+                            f"{html.escape(DOMAIN_EXPLANATIONS.get(top_domain, 'Indice de domaine.'))}"
+                        ),
+                    }
+                )
+
+    for item in evidence_items:
+        feature_name = str(item.get("feature_name", ""))
+        display_name = str(item.get("display_name", ""))
+        contribution = float(item.get("Contribution", 0.0))
+        if feature_name.startswith("word_tfidf__") and _is_lexical_term_useful(display_name):
+            for start, end in _find_keyword_spans(facts_summary, display_name):
+                annotation_candidates.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "tone": predicted_category,
+                        "weight": 2.0 + contribution,
+                        "tooltip": (
+                            f"<strong>{html.escape(display_name)}</strong><br>"
+                            f"Indice lexical repere par le modele<br>"
+                            f"Contribution positive vers {_humanize_category(predicted_category).lower()} "
+                            f"({contribution:.3f})."
+                        ),
+                    }
+                )
+
+    selected_annotations: list[dict[str, object]] = []
+    occupied_positions: set[int] = set()
+    for candidate in sorted(
+        annotation_candidates,
+        key=lambda item: (-float(item["weight"]), -(int(item["end"]) - int(item["start"]))),
+    ):
+        span_positions = set(range(int(candidate["start"]), int(candidate["end"])))
+        if occupied_positions.intersection(span_positions):
+            continue
+        selected_annotations.append(candidate)
+        occupied_positions.update(span_positions)
+
+    return sorted(selected_annotations, key=lambda item: int(item["start"]))
+
+
+def _render_annotated_sentence(
+    facts_summary: str,
+    annotations: list[dict[str, object]],
+) -> str:
+    if not annotations:
+        return (
+            '<div class="annotated-sentence">'
+            + html.escape(facts_summary)
+            + "</div>"
+        )
+
+    chunks: list[str] = []
+    cursor = 0
+    for annotation in annotations:
+        start = int(annotation["start"])
+        end = int(annotation["end"])
+        tone = str(annotation["tone"])
+        tooltip = str(annotation["tooltip"])
+
+        chunks.append(html.escape(facts_summary[cursor:start]))
+        surface = html.escape(facts_summary[start:end])
+        chunks.append(
+            f'<span class="annotated-token annotation-{tone}" title="{html.escape(re.sub("<[^>]+>", " ", tooltip))}">'
+            f"{surface}<span class=\"token-tooltip\">{tooltip}</span></span>"
+        )
+        cursor = end
+
+    chunks.append(html.escape(facts_summary[cursor:]))
+    return '<div class="annotated-sentence">' + "".join(chunks) + "</div>"
+
+
+def _build_category_wordcloud(
+    dataset_df: Optional[pd.DataFrame], category: str
+) -> Optional[plt.Figure]:
+    if dataset_df is None or dataset_df.empty or WordCloud is None:
+        return None
+
+    category_df = dataset_df[dataset_df[TARGET_COLUMN] == category]
+    if category_df.empty:
+        return None
+
+    texts = category_df[TEXT_COLUMN].astype(str).tolist()
+    vectorizer = None
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        vectorizer = TfidfVectorizer(
+            min_df=2,
+            max_df=0.9,
+            stop_words=sorted(FRENCH_WORDCLOUD_STOPWORDS.union(WORDCLOUD_STOPWORDS)),
+        )
+        matrix = vectorizer.fit_transform(texts)
+        scores = np.asarray(matrix.mean(axis=0)).ravel()
+        terms = vectorizer.get_feature_names_out()
+        frequencies = {
+            term: float(score)
+            for term, score in zip(terms, scores)
+            if float(score) > 0
+        }
+    except ValueError:
+        frequencies = {}
+
+    def _is_visual_wordcloud_term_allowed(term: str) -> bool:
+        cleaned = _normalize_text(str(term)).strip()
+        if not cleaned:
+            return False
+        if cleaned in WORDCLOUD_VISUAL_BLACKLIST:
+            return False
+        if re.fullmatch(r"(19|20)\d{2}", cleaned):
+            return False
+        if re.fullmatch(r"\d+", cleaned):
+            return False
+        if re.fullmatch(r"\d+(er|e|eme)", cleaned):
+            return False
+        if re.fullmatch(r"\d+[a-z]{0,2}", cleaned):
+            return False
+        return True
+
+    frequencies = {
+        term: weight
+        for term, weight in frequencies.items()
+        if _is_visual_wordcloud_term_allowed(term)
+    }
+
+    if not frequencies:
+        return None
+
+    cloud = WordCloud(
+        width=900,
+        height=480,
+        background_color="white",
+        max_words=70,
+        prefer_horizontal=0.9,
+        stopwords=FRENCH_WORDCLOUD_STOPWORDS.union(WORDCLOUD_STOPWORDS),
+        colormap={
+            "exces_de_pouvoir": "RdPu",
+            "plein_contentieux": "Blues",
+            "autres_recours": "Greys",
+        }.get(category, "viridis"),
+    ).generate_from_frequencies(frequencies)
+
+    figure, axis = plt.subplots(figsize=(8, 4))
+    axis.imshow(cloud, interpolation="bilinear")
+    axis.axis("off")
+    figure.tight_layout(pad=0)
+    return figure
 
 
 def _model_reading_copy(model_key: str) -> tuple[str, str]:
@@ -2019,6 +2664,32 @@ def _render_case_studio(
             unsafe_allow_html=True,
         )
 
+    evidence_items = _linear_evidence_items(
+        model,
+        facts_summary,
+        predicted_category,
+        top_n=8,
+    )
+    inline_annotations = _build_inline_annotations(
+        facts_summary,
+        predicted_category,
+        top_domain,
+        domain_signal,
+        evidence_items,
+    )
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    _glass_open()
+    _section_header(
+        "Phrase analysee",
+        "Les mots ou expressions les plus influents sont surlignes directement dans la phrase. Survole-les pour comprendre pourquoi ils comptent.",
+    )
+    st.markdown(
+        _render_annotated_sentence(facts_summary, inline_annotations),
+        unsafe_allow_html=True,
+    )
+    _glass_close()
+
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     analysis_left, analysis_right = st.columns((1, 1), gap="large")
 
@@ -2094,14 +2765,24 @@ def _render_case_studio(
             "jurisprudence administrative du corpus comme reference principale."
         )
     else:
-        similar_cases_df = _find_similar_jurisprudence(
+        similar_cases_raw = _similar_jurisprudence_matches(
             model,
             dataset_df,
             reference_df,
             facts_summary,
+            top_n=8,
         )
-        if similar_cases_df is not None:
-            st.dataframe(similar_cases_df, width="stretch", hide_index=True)
+        if similar_cases_raw is not None:
+            st.plotly_chart(
+                _build_jurisprudence_network(facts_summary, similar_cases_raw),
+                width="stretch",
+                config={"displayModeBar": False},
+            )
+            st.dataframe(
+                _format_similar_jurisprudence(similar_cases_raw),
+                width="stretch",
+                hide_index=True,
+            )
         else:
             st.info("Impossible de calculer un rapprochement fiable avec le corpus.")
     _glass_close()
@@ -2243,6 +2924,36 @@ def _render_corpus(
         else:
             st.info("Exemples indisponibles.")
         _glass_close()
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+    _glass_open()
+    _section_header(
+        "Nuages de mots par categorie",
+        "Lecture visuelle du vocabulaire qui ressort le plus dans chaque famille de recours du corpus.",
+    )
+    if WordCloud is None:
+        st.info(
+            "Le package `wordcloud` n'est pas encore disponible dans l'environnement. "
+            "Installe les dependances du projet pour activer cette visualisation."
+        )
+    else:
+        cloud_columns = st.columns(3, gap="medium")
+        for column, category in zip(cloud_columns, CATEGORY_LABELS.keys()):
+            with column:
+                st.markdown(
+                    f"""
+                    <div class="micro-chip" style="margin-bottom: 0.7rem;">
+                        {_humanize_category(str(category))}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                figure = _build_category_wordcloud(dataset_df, str(category))
+                if figure is not None:
+                    st.pyplot(figure, clear_figure=True, use_container_width=True)
+                else:
+                    st.info("Nuage indisponible pour cette categorie.")
+    _glass_close()
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
     lower_left, lower_right = st.columns((0.95, 1.05), gap="large")

@@ -1,8 +1,11 @@
 joblib
 ipykernel
+matplotlib
 nbformat
 pandas
 plotly
 python-dotenv
 scikit-learn
+seaborn
 streamlit
+wordcloud
