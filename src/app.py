@@ -55,6 +55,11 @@ CATEGORY_LABELS = {
     "autres_recours": "Autres recours administratifs",
 }
 
+PLOT_BG = "rgba(248, 239, 228, 0.96)"
+PLOT_TEXT = "#252b4d"
+PLOT_MUTED = "#5b4e5d"
+PLOT_GRID = "rgba(121, 86, 104, 0.12)"
+
 OUTCOME_LABELS = {
     "defavorable_requerant": "Defavorable au requerant",
     "favorable_requerant": "Favorable au requerant",
@@ -516,26 +521,49 @@ def _inject_css() -> None:
         """
         <style>
             :root {
-                --surface: rgba(255, 255, 255, 0.72);
-                --surface-strong: rgba(255, 255, 255, 0.84);
-                --surface-soft: rgba(248, 248, 250, 0.64);
-                --line: rgba(15, 23, 42, 0.08);
-                --line-strong: rgba(15, 23, 42, 0.12);
-                --text: #0f172a;
-                --muted: #667085;
-                --shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
-                --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.05);
-                --radius-xl: 24px;
-                --radius-lg: 20px;
-                --radius-md: 16px;
+                --display-font: "Tropika", "Cooper Black", "Avenir Next Condensed",
+                    "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+                --body-font: "Avenir Next", "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
+                --surface: rgba(244, 230, 214, 0.93);
+                --surface-strong: rgba(248, 238, 226, 0.98);
+                --surface-soft: rgba(237, 218, 201, 0.82);
+                --line: rgba(35, 40, 75, 0.10);
+                --line-strong: rgba(35, 40, 75, 0.18);
+                --text: #24284c;
+                --muted: #665767;
+                --poster-plum: #7d5b6b;
+                --poster-plum-deep: #694c5d;
+                --poster-mauve: #94717f;
+                --poster-cream: #f2ddc7;
+                --poster-sand: #d5b29a;
+                --poster-navy: #252b4d;
+                --poster-lilac: #b397ba;
+                --shadow: 0 24px 70px rgba(36, 40, 76, 0.18);
+                --shadow-soft: 0 10px 26px rgba(36, 40, 76, 0.10);
+                --radius-xl: 28px;
+                --radius-lg: 22px;
+                --radius-md: 18px;
             }
 
             .stApp {
-                background:
-                    radial-gradient(circle at top left, rgba(214, 224, 255, 0.55), transparent 35%),
-                    radial-gradient(circle at top right, rgba(245, 247, 250, 0.8), transparent 30%),
-                    linear-gradient(180deg, #f7f8fa 0%, #eef1f5 100%);
+                background-image:
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%23c58aa0' d='M50 6c3 0 6 10 9 22 1 3 4 6 8 6 12 1 23 3 24 7 1 3-8 11-17 18-3 2-4 6-3 10 3 12 5 23 2 25-3 2-12-5-22-12-3-2-7-2-10 0-10 7-19 14-22 12-3-2-1-13 2-25 1-4 0-8-3-10C19 52 10 44 11 41c1-4 12-6 24-7 4 0 7-3 8-6C44 16 47 6 50 6Z'/%3E%3C/svg%3E"),
+                    radial-gradient(circle at 12% 18%, rgba(242, 221, 199, 0.15) 0 0.8%, transparent 1%),
+                    radial-gradient(circle at 84% 24%, rgba(242, 221, 199, 0.10) 0 0.7%, transparent 0.9%),
+                    radial-gradient(circle at 28% 72%, rgba(242, 221, 199, 0.08) 0 0.7%, transparent 0.9%),
+                    linear-gradient(180deg, #8d6a7b 0%, #7b5b6c 40%, #6d4f61 100%);
+                background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+                background-size: 46px 46px, 24px 24px, 18px 18px, 30px 30px, 20px 20px, 28px 28px, 16px 16px, 22px 22px, auto, auto, auto, auto;
+                background-position: 8% 14%, 19% 32%, 33% 10%, 52% 22%, 68% 11%, 79% 36%, 88% 16%, 61% 78%, 12% 18%, 84% 24%, 28% 72%, center top;
+                background-attachment: fixed, fixed, fixed, fixed, fixed, fixed, fixed, fixed, scroll, scroll, scroll, scroll;
                 color: var(--text);
+                font-family: var(--body-font);
             }
 
             [data-testid="stAppViewContainer"] > .main {
@@ -551,8 +579,9 @@ def _inject_css() -> None:
             }
 
             [data-testid="stSidebar"] {
-                background: rgba(250, 250, 252, 0.74);
-                border-right: 1px solid rgba(255, 255, 255, 0.55);
+                background:
+                    linear-gradient(180deg, rgba(37, 43, 77, 0.97), rgba(53, 44, 80, 0.95));
+                border-right: 1px solid rgba(242, 221, 199, 0.14);
                 backdrop-filter: blur(18px);
             }
 
@@ -564,6 +593,30 @@ def _inject_css() -> None:
                 padding-top: 2rem;
                 padding-left: 1rem;
                 padding-right: 1rem;
+            }
+
+            [data-testid="stSidebar"] h3,
+            [data-testid="stSidebar"] p,
+            [data-testid="stSidebar"] label,
+            [data-testid="stSidebar"] span,
+            [data-testid="stSidebar"] div {
+                color: var(--poster-cream) !important;
+            }
+
+            [data-testid="stSidebar"] div[data-baseweb="select"] > div,
+            [data-testid="stSidebar"] div[data-baseweb="base-input"] > div {
+                background: rgba(242, 221, 199, 0.10);
+                border: 1px solid rgba(242, 221, 199, 0.16);
+                box-shadow: none;
+            }
+
+            button[role="tab"] {
+                color: var(--poster-navy);
+                font-weight: 700;
+            }
+
+            button[role="tab"][aria-selected="true"] {
+                color: #6d43b8;
             }
 
             header[data-testid="stHeader"] {
@@ -578,35 +631,36 @@ def _inject_css() -> None:
                 width: 100%;
                 min-height: 52px;
                 border-radius: 999px;
-                border: 1px solid rgba(255, 255, 255, 0.72);
-                background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(17, 24, 39, 0.82));
-                color: #ffffff;
-                font-weight: 600;
-                letter-spacing: -0.01em;
-                box-shadow: 0 14px 32px rgba(17, 24, 39, 0.16);
+                border: 1px solid rgba(242, 221, 199, 0.36);
+                background: linear-gradient(180deg, #3f3665, #6d43b8);
+                color: var(--poster-cream);
+                font-weight: 700;
+                letter-spacing: 0.01em;
+                box-shadow: 0 14px 32px rgba(63, 54, 101, 0.30);
                 transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
             }
 
             div.stButton > button:hover {
                 transform: translateY(-1px) scale(1.01);
-                box-shadow: 0 18px 36px rgba(17, 24, 39, 0.2);
-                filter: brightness(1.02);
+                box-shadow: 0 18px 36px rgba(63, 54, 101, 0.35);
+                filter: brightness(1.05);
             }
 
             div.stButton > button:focus:not(:active) {
-                border: 1px solid rgba(15, 23, 42, 0.12);
-                box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+                border: 1px solid rgba(213, 178, 154, 0.6);
+                box-shadow: 0 0 0 4px rgba(179, 151, 186, 0.22);
             }
 
             div[data-baseweb="textarea"] textarea {
                 border-radius: var(--radius-lg);
-                background: rgba(255, 255, 255, 0.76);
-                border: 1px solid rgba(255, 255, 255, 0.58);
-                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+                background: rgba(248, 239, 228, 0.96);
+                border: 1px solid rgba(121, 86, 104, 0.18);
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
                 backdrop-filter: blur(14px);
                 font-size: 1rem;
                 line-height: 1.6;
                 padding: 1rem 1.1rem;
+                color: var(--poster-navy);
             }
 
             div[data-baseweb="select"] > div,
@@ -621,14 +675,19 @@ def _inject_css() -> None:
             }
 
             [data-testid="stDataFrame"] {
-                border: 1px solid rgba(255, 255, 255, 0.45);
+                border: 1px solid rgba(121, 86, 104, 0.14);
                 box-shadow: var(--shadow-soft);
                 overflow: hidden;
+                background: rgba(248, 239, 228, 0.96);
             }
 
             [data-testid="stPlotlyChart"] {
                 border-radius: var(--radius-lg);
                 overflow: hidden;
+                background: rgba(248, 239, 228, 0.96);
+                border: 1px solid rgba(121, 86, 104, 0.14);
+                box-shadow: var(--shadow-soft);
+                padding: 0.25rem;
             }
 
             [data-testid="stRadio"] label {
@@ -636,7 +695,14 @@ def _inject_css() -> None:
             }
 
             .hero-shell {
-                padding: 1.2rem 0 1.8rem 0;
+                padding: 1.55rem 1.65rem 1.8rem 1.65rem;
+                border-radius: 34px;
+                background:
+                    radial-gradient(circle at 15% 22%, rgba(242, 221, 199, 0.12) 0 0.7%, transparent 0.9%),
+                    radial-gradient(circle at 88% 30%, rgba(242, 221, 199, 0.10) 0 0.7%, transparent 0.9%),
+                    linear-gradient(180deg, rgba(122, 89, 105, 0.98), rgba(106, 74, 91, 0.98));
+                border: 1px solid rgba(242, 221, 199, 0.18);
+                box-shadow: 0 24px 56px rgba(36, 40, 76, 0.20);
             }
 
             .eyebrow {
@@ -645,30 +711,34 @@ def _inject_css() -> None:
                 gap: 0.5rem;
                 padding: 0.4rem 0.78rem;
                 border-radius: 999px;
-                background: rgba(255, 255, 255, 0.55);
-                border: 1px solid rgba(255, 255, 255, 0.72);
-                color: #475467;
-                font-size: 0.8rem;
+                background: rgba(242, 221, 199, 0.16);
+                border: 1px solid rgba(242, 221, 199, 0.24);
+                color: var(--poster-cream);
+                font-size: 0.82rem;
                 letter-spacing: 0.02em;
                 text-transform: uppercase;
                 backdrop-filter: blur(16px);
+                font-family: var(--body-font);
             }
 
             .hero-title {
                 margin: 1rem 0 0.55rem 0;
-                font-size: clamp(2.3rem, 5vw, 4.5rem);
-                line-height: 0.98;
-                letter-spacing: -0.045em;
+                font-family: var(--display-font);
+                font-size: clamp(2.9rem, 6vw, 5.2rem);
+                line-height: 0.92;
+                letter-spacing: -0.03em;
                 font-weight: 700;
-                color: var(--text);
+                color: var(--poster-cream);
+                text-transform: uppercase;
+                text-shadow: 0 2px 0 rgba(36, 40, 76, 0.16);
             }
 
             .hero-subtitle {
                 max-width: 760px;
                 margin: 0;
-                color: var(--muted);
-                font-size: 1.02rem;
-                line-height: 1.7;
+                color: rgba(242, 221, 199, 0.92);
+                font-size: 1rem;
+                line-height: 1.75;
                 letter-spacing: -0.01em;
             }
 
@@ -676,18 +746,18 @@ def _inject_css() -> None:
                 position: relative;
                 overflow: visible;
                 background: var(--surface);
-                border: 1px solid rgba(255, 255, 255, 0.52);
+                border: 1px solid rgba(121, 86, 104, 0.14);
                 border-radius: var(--radius-xl);
                 box-shadow: var(--shadow);
-                backdrop-filter: blur(18px);
-                -webkit-backdrop-filter: blur(18px);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
                 padding: 1.35rem;
                 transition: transform 180ms ease, box-shadow 180ms ease;
             }
 
             .glass-card:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 24px 72px rgba(15, 23, 42, 0.1);
+                box-shadow: 0 26px 74px rgba(36, 40, 76, 0.20);
             }
 
             .tooltip-host {
@@ -703,40 +773,44 @@ def _inject_css() -> None:
             }
 
             .kpi-label {
-                color: var(--muted);
+                color: #6c5867;
                 font-size: 0.88rem;
                 letter-spacing: -0.01em;
+                text-transform: uppercase;
             }
 
             .kpi-value {
                 margin-top: 0.75rem;
-                font-size: clamp(1.9rem, 3vw, 2.7rem);
+                font-family: var(--display-font);
+                font-size: clamp(2.2rem, 3vw, 3rem);
                 line-height: 1;
-                letter-spacing: -0.04em;
+                letter-spacing: -0.02em;
                 font-weight: 700;
-                color: var(--text);
+                color: var(--poster-navy);
             }
 
             .kpi-hint {
-                color: #475467;
+                color: #4e4050;
                 font-size: 0.92rem;
                 line-height: 1.5;
             }
 
             .section-heading {
                 margin: 0;
-                font-size: 1.45rem;
-                line-height: 1.15;
-                letter-spacing: -0.03em;
+                font-family: var(--display-font);
+                font-size: 1.95rem;
+                line-height: 1.02;
+                letter-spacing: -0.02em;
                 font-weight: 650;
-                color: var(--text);
+                color: var(--poster-navy);
+                text-transform: uppercase;
             }
 
             .section-subtitle {
                 margin: 0.35rem 0 0 0;
-                color: var(--muted);
-                font-size: 0.96rem;
-                line-height: 1.6;
+                color: rgba(242, 221, 199, 0.88);
+                font-size: 0.95rem;
+                line-height: 1.65;
             }
 
             .micro-chip {
@@ -745,17 +819,17 @@ def _inject_css() -> None:
                 gap: 0.35rem;
                 padding: 0.38rem 0.7rem;
                 border-radius: 999px;
-                background: rgba(255, 255, 255, 0.48);
-                border: 1px solid rgba(255, 255, 255, 0.64);
-                color: #344054;
+                background: rgba(121, 86, 104, 0.10);
+                border: 1px solid rgba(121, 86, 104, 0.18);
+                color: var(--poster-navy);
                 font-size: 0.84rem;
-                font-weight: 500;
+                font-weight: 700;
             }
 
             .signal-card {
                 padding: 1rem 1.05rem;
-                background: rgba(255, 255, 255, 0.44);
-                border: 1px solid rgba(255, 255, 255, 0.52);
+                background: rgba(236, 221, 205, 0.72);
+                border: 1px solid rgba(121, 86, 104, 0.12);
                 border-radius: 18px;
                 min-height: 140px;
             }
@@ -777,7 +851,7 @@ def _inject_css() -> None:
 
             .signal-caption {
                 margin-top: 0.6rem;
-                color: #475467;
+                color: #4f4150;
                 font-size: 0.9rem;
                 line-height: 1.5;
             }
@@ -785,44 +859,67 @@ def _inject_css() -> None:
             .callout {
                 padding: 1rem 1.05rem;
                 border-radius: 18px;
-                border: 1px solid rgba(255, 255, 255, 0.58);
-                backdrop-filter: blur(12px);
-                background: rgba(255, 255, 255, 0.58);
+                border: 1px solid rgba(121, 86, 104, 0.14);
+                backdrop-filter: blur(8px);
+                background: rgba(248, 239, 228, 0.84);
             }
 
             .callout-strong {
-                background: rgba(255, 252, 235, 0.74);
-                border-color: rgba(245, 158, 11, 0.18);
+                background: rgba(242, 221, 199, 0.82);
+                border-color: rgba(213, 178, 154, 0.34);
             }
 
             .callout-danger {
-                background: rgba(255, 245, 245, 0.82);
-                border-color: rgba(239, 68, 68, 0.18);
+                background: rgba(236, 213, 219, 0.84);
+                border-color: rgba(125, 91, 107, 0.24);
             }
 
             .callout-ok {
-                background: rgba(239, 250, 244, 0.82);
-                border-color: rgba(16, 185, 129, 0.18);
+                background: rgba(229, 235, 222, 0.84);
+                border-color: rgba(91, 120, 91, 0.24);
             }
 
             .callout-title {
                 margin: 0;
                 font-size: 0.95rem;
                 font-weight: 650;
-                color: var(--text);
+                color: var(--poster-navy);
             }
 
             .callout-copy {
                 margin: 0.45rem 0 0 0;
-                color: #475467;
+                color: #4d4050;
                 font-size: 0.92rem;
                 line-height: 1.55;
             }
 
             .footer-note {
-                color: var(--muted);
+                color: rgba(242, 221, 199, 0.86);
                 font-size: 0.9rem;
                 line-height: 1.6;
+            }
+
+            [data-testid="stSidebar"] .callout-title,
+            [data-testid="stSidebar"] .callout-copy {
+                color: var(--poster-cream) !important;
+            }
+
+            [data-testid="stSidebar"] .micro-chip {
+                background: rgba(242, 221, 199, 0.08) !important;
+                border-color: rgba(242, 221, 199, 0.16) !important;
+                color: var(--poster-cream) !important;
+            }
+
+            [data-testid="stSidebar"] .footer-note,
+            [data-testid="stSidebar"] .signal-caption,
+            [data-testid="stSidebar"] .section-subtitle {
+                color: rgba(242, 221, 199, 0.84) !important;
+            }
+
+            [data-testid="stCaptionContainer"],
+            .stCaption,
+            [data-testid="stMarkdownContainer"] .stCaption {
+                color: rgba(242, 221, 199, 0.84) !important;
             }
 
             .annotated-sentence {
@@ -1344,8 +1441,8 @@ def _build_confusion_chart(
     if confusion_df is None or confusion_df.empty or selected_model_key is None:
         figure.update_layout(
             height=360,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1353,8 +1450,8 @@ def _build_confusion_chart(
     if model_df.empty:
         figure.update_layout(
             height=360,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1374,9 +1471,9 @@ def _build_confusion_chart(
                 x=heatmap_df.columns.tolist(),
                 y=heatmap_df.index.tolist(),
                 colorscale=[
-                    [0.0, "rgba(226,232,240,0.35)"],
-                    [0.5, "rgba(148,163,184,0.62)"],
-                    [1.0, "rgba(15,23,42,0.92)"],
+                    [0.0, "rgba(242,221,199,0.40)"],
+                    [0.5, "rgba(179,151,186,0.58)"],
+                    [1.0, "rgba(37,43,77,0.92)"],
                 ],
                 text=heatmap_df.values,
                 texttemplate="%{text}",
@@ -1387,13 +1484,13 @@ def _build_confusion_chart(
     figure.update_layout(
         height=360,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(title="Prediction", color="#667085"),
-        yaxis=dict(title="Reel", color="#667085"),
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
+        xaxis=dict(title="Prediction", color=PLOT_MUTED),
+        yaxis=dict(title="Reel", color=PLOT_MUTED),
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -1405,8 +1502,8 @@ def _build_metrics_chart(metrics_df: Optional[pd.DataFrame]) -> go.Figure:
     if metrics_df is None or metrics_df.empty:
         figure.update_layout(
             height=320,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1430,22 +1527,22 @@ def _build_metrics_chart(metrics_df: Optional[pd.DataFrame]) -> go.Figure:
     figure.update_layout(
         height=320,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
         bargap=0.38,
         xaxis=dict(
             title="",
             showgrid=True,
-            gridcolor="rgba(15, 23, 42, 0.08)",
+            gridcolor=PLOT_GRID,
             zeroline=False,
             ticksuffix="%",
-            color="#667085",
+            color=PLOT_MUTED,
         ),
-        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        yaxis=dict(title="", showgrid=False, color=PLOT_TEXT),
         showlegend=False,
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -1457,8 +1554,8 @@ def _build_category_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     if dataset_df is None or dataset_df.empty:
         figure.update_layout(
             height=320,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1489,21 +1586,21 @@ def _build_category_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     figure.update_layout(
         height=340,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
         bargap=0.34,
         xaxis=dict(
             title="",
             showgrid=True,
-            gridcolor="rgba(15, 23, 42, 0.08)",
+            gridcolor=PLOT_GRID,
             zeroline=False,
-            color="#667085",
+            color=PLOT_MUTED,
         ),
-        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        yaxis=dict(title="", showgrid=False, color=PLOT_TEXT),
         showlegend=False,
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -1515,8 +1612,8 @@ def _build_text_length_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     if dataset_df is None or dataset_df.empty or "text_length" not in dataset_df.columns:
         figure.update_layout(
             height=340,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1549,20 +1646,20 @@ def _build_text_length_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     figure.update_layout(
         height=340,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
         xaxis=dict(
             title="Longueur du resume (caracteres)",
             showgrid=True,
-            gridcolor="rgba(15, 23, 42, 0.08)",
+            gridcolor=PLOT_GRID,
             zeroline=False,
-            color="#667085",
+            color=PLOT_MUTED,
         ),
-        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        yaxis=dict(title="", showgrid=False, color=PLOT_TEXT),
         showlegend=False,
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -1574,8 +1671,8 @@ def _build_outcome_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     if dataset_df is None or dataset_df.empty or OUTCOME_COLUMN not in dataset_df.columns:
         figure.update_layout(
             height=340,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor=PLOT_BG,
+            plot_bgcolor=PLOT_BG,
         )
         return figure
 
@@ -1605,21 +1702,21 @@ def _build_outcome_chart(dataset_df: Optional[pd.DataFrame]) -> go.Figure:
     figure.update_layout(
         height=340,
         margin=dict(l=0, r=0, t=8, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
         bargap=0.34,
         xaxis=dict(
             title="Nombre de decisions",
             showgrid=True,
-            gridcolor="rgba(15, 23, 42, 0.08)",
+            gridcolor=PLOT_GRID,
             zeroline=False,
-            color="#667085",
+            color=PLOT_MUTED,
         ),
-        yaxis=dict(title="", showgrid=False, color="#0f172a"),
+        yaxis=dict(title="", showgrid=False, color=PLOT_TEXT),
         showlegend=False,
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -2243,27 +2340,27 @@ def _build_evidence_decay_chart(evidence_items: list[dict[str, object]]) -> Opti
     figure.update_layout(
         height=330,
         margin=dict(l=0, r=0, t=12, b=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor=PLOT_BG,
+        plot_bgcolor=PLOT_BG,
         bargap=0.34,
         xaxis=dict(
             title="Rang des indices",
             tickmode="array",
             tickvals=chart_df["rank"].tolist(),
             showgrid=False,
-            color="#667085",
+            color=PLOT_MUTED,
         ),
         yaxis=dict(
             title="Part relative (%)",
             showgrid=True,
-            gridcolor="rgba(15, 23, 42, 0.08)",
+            gridcolor=PLOT_GRID,
             zeroline=False,
-            color="#667085",
+            color=PLOT_MUTED,
         ),
         showlegend=False,
         font=dict(
             family="SF Pro Display, SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-            color="#0f172a",
+            color=PLOT_TEXT,
         ),
     )
     return figure
@@ -3023,7 +3120,7 @@ def _render_case_studio(
         if probability_df is not None:
             st.dataframe(
                 _format_probability_df(probability_df.head(3)),
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
             )
 
@@ -3043,7 +3140,7 @@ def _render_case_studio(
         evidence_tabs = st.tabs(["Indices principaux", "Importance decroissante"])
         with evidence_tabs[0]:
             if evidence_df is not None:
-                st.dataframe(evidence_df, width="stretch", hide_index=True)
+                st.dataframe(evidence_df, use_container_width=True, hide_index=True)
             else:
                 st.info("Aucune evidence lexicale exploitable n'a pu etre extraite.")
         with evidence_tabs[1]:
@@ -3051,7 +3148,7 @@ def _render_case_studio(
             if evidence_chart is not None:
                 st.plotly_chart(
                     evidence_chart,
-                    width="stretch",
+                    use_container_width=True,
                     config={"displayModeBar": False},
                 )
                 st.caption(
@@ -3083,7 +3180,7 @@ def _render_case_studio(
             )
             st.dataframe(
                 _format_outcome_df(outcome_df),
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
             )
         else:
@@ -3118,7 +3215,7 @@ def _render_case_studio(
                     facts_summary,
                     similar_cases_raw,
                 ),
-                width="stretch",
+                use_container_width=True,
                 config={"displayModeBar": False},
             )
             st.caption(
@@ -3129,7 +3226,7 @@ def _render_case_studio(
                 _format_similar_jurisprudence(
                     close_cases_df if not close_cases_df.empty else similar_cases_raw.head(8)
                 ),
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
             )
         else:
@@ -3157,7 +3254,7 @@ def _render_corpus(
             "Lecture rapide de la matiere premiere qui alimente le moteur de triage.",
         )
         if not profile_df.empty:
-            st.dataframe(profile_df, width="stretch", hide_index=True)
+            st.dataframe(profile_df, use_container_width=True, hide_index=True)
         else:
             st.info("Dataset indisponible.")
         _glass_close()
@@ -3169,7 +3266,7 @@ def _render_corpus(
             "Reference compacte pour relire le niveau du modele pendant la demo.",
         )
         if metrics_df is not None and not metrics_df.empty:
-            st.dataframe(_format_metrics(metrics_df), width="stretch", hide_index=True)
+            st.dataframe(_format_metrics(metrics_df), use_container_width=True, hide_index=True)
         else:
             st.info("Aucune metrique disponible.")
         if robustness_df is not None and not robustness_df.empty:
@@ -3212,7 +3309,7 @@ def _render_corpus(
                         "Confiance moyenne (%)",
                     ]
                 ],
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
             )
     _glass_close()
@@ -3228,7 +3325,7 @@ def _render_corpus(
         )
         st.plotly_chart(
             _build_category_chart(dataset_df),
-            width="stretch",
+            use_container_width=True,
             config={"displayModeBar": False},
         )
         _glass_close()
@@ -3241,7 +3338,7 @@ def _render_corpus(
         )
         st.plotly_chart(
             _build_text_length_chart(dataset_df),
-            width="stretch",
+            use_container_width=True,
             config={"displayModeBar": False},
         )
         _glass_close()
@@ -3257,7 +3354,7 @@ def _render_corpus(
         )
         st.plotly_chart(
             _build_outcome_chart(dataset_df),
-            width="stretch",
+            use_container_width=True,
             config={"displayModeBar": False},
         )
         _glass_close()
@@ -3269,7 +3366,7 @@ def _render_corpus(
             "Un exemple representatif par famille de recours pour lire concretement le corpus.",
         )
         if not examples_df.empty:
-            st.dataframe(examples_df, width="stretch", hide_index=True)
+            st.dataframe(examples_df, use_container_width=True, hide_index=True)
         else:
             st.info("Exemples indisponibles.")
         _glass_close()
@@ -3321,7 +3418,7 @@ def _render_corpus(
             if not formatted_class_metrics.empty:
                 st.dataframe(
                     formatted_class_metrics,
-                    width="stretch",
+                    use_container_width=True,
                     hide_index=True,
                 )
             else:
@@ -3337,7 +3434,11 @@ def _render_corpus(
             "Lecture rapide des confusions entre familles de recours sur le jeu de test.",
         )
         confusion_chart = _build_confusion_chart(confusion_df, selected_model_key)
-        st.plotly_chart(confusion_chart, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(
+            confusion_chart,
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
         _glass_close()
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
